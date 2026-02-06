@@ -2,11 +2,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    Users, Search, Plus, MapPin, Mail, Phone, Edit2, PlayCircle, X
+    Users, Search, Plus, MapPin, Mail, Phone, Edit2, PlayCircle, X, MessageCircle
 } from 'lucide-react';
+import { getWhatsAppLink, generateMessage } from '../utils/whatsapp';
+import { interactionsService } from '../services/api';
 import { useAppContext } from '../context/AppContext';
-import { Client } from '../../types';
-import { clientService } from '../../services/api';
+import { Client } from '../types';
+import { clientService } from '../services/api';
 
 // Reusing UI components from App.tsx (assuming they will be moved to components folder)
 // For now, I will assume a shared components file or copy them
@@ -118,7 +120,7 @@ export const Clients = () => {
 
             if (editingClient) {
                 // TODO: Update existing client API
-                // await clientService.update(editingClient.id, clientData);
+                // await clientsService.update(editingClient.id, clientData);
             } else {
                 await clientService.create(clientData);
             }
@@ -145,6 +147,27 @@ export const Clients = () => {
         if (score >= 700) return 'success';
         if (score >= 500) return 'warning';
         return 'danger';
+    };
+
+    const handleContact = async (client: Client) => {
+        const message = generateMessage('FOLLOWUP', {
+            clientName: client.name,
+            vehicle: client.desiredVehicle?.model || 'um veículo'
+        });
+
+        const link = getWhatsAppLink(client.phone || '', message);
+
+        try {
+            await interactionsService.create({
+                clientId: client.id,
+                type: 'WHATSAPP',
+                note: `Contato via lista de clientes`
+            });
+        } catch (err) {
+            console.error('Failed to log interaction', err);
+        }
+
+        window.open(link, '_blank');
     };
 
     return (
@@ -290,6 +313,13 @@ export const Clients = () => {
                                                     title="Editar"
                                                 >
                                                     <Edit2 size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleContact(client)}
+                                                    className="p-2 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-600 hover:text-emerald-800 transition-colors"
+                                                    title="Contatar via WhatsApp"
+                                                >
+                                                    <MessageCircle size={16} />
                                                 </button>
                                                 <button
                                                     onClick={() => navigate('/simulation', { state: { client } })}

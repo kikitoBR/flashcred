@@ -1,19 +1,22 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     History, Search, ArrowUpDown, ArrowUp, ArrowDown, Zap, PhoneCall, RefreshCw,
-    User, Phone, Mail, Car, PlayCircle, Printer, TrendingUp, FileText
+    User, Phone, Mail, Car, PlayCircle, Printer, TrendingUp, FileText, MessageCircle
 } from 'lucide-react';
 import {
     ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip,
     BarChart, Bar, Legend
 } from 'recharts';
-import { Button, Card, Badge, Input, Modal } from '../../components/ui';
+import { Button, Card, Badge, Input, Modal } from '../components/ui';
+import { salesService, interactionsService } from '../services/api';
+import { getWhatsAppLink, generateMessage } from '../utils/whatsapp';
 
 export const Statistics = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'remarketing' | 'retry'>('remarketing');
+    const [loading, setLoading] = useState(true);
 
     // Modal for Client Details
     const [isOppModalOpen, setIsOppModalOpen] = useState(false);
@@ -33,53 +36,59 @@ export const Statistics = () => {
     const [exportStartDate, setExportStartDate] = useState('2023-01-01');
     const [exportEndDate, setExportEndDate] = useState(new Date().toISOString().split('T')[0]);
 
-    // Consolidated Data for Last 5 Months
-    const salesData = [
-        { name: 'Jul', value: 600000 },
-        { name: 'Ago', value: 500000 },
-        { name: 'Set', value: 750000 },
-        { name: 'Out', value: 820000 },
-        { name: 'Nov', value: 950000 },
-    ];
+    // Data State
+    const [salesData, setSalesData] = useState<any[]>([]);
+    const [bankPerformanceData, setBankPerformanceData] = useState<any[]>([]);
+    const [remarketingList, setRemarketingList] = useState<any[]>([]);
+    const [retryList, setRetryList] = useState<any[]>([]);
+    const [simulationHistory, setSimulationHistory] = useState<any[]>([]);
+    const [kpiData, setKpiData] = useState({ todaySims: 0, todayApprovals: 0, totalFinanced: 0 });
 
-    // Aggregated Bank Performance (All Time/Period)
-    const bankPerformanceData = [
-        { name: 'Itaú', aprovados: 120, reprovados: 35 },
-        { name: 'Santander', aprovados: 98, reprovados: 45 },
-        { name: 'Bradesco', aprovados: 85, reprovados: 55 },
-        { name: 'BV', aprovados: 65, reprovados: 30 },
-        { name: 'C6', aprovados: 50, reprovados: 25 },
-    ];
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const [stats, simulations, opportunities] = await Promise.all([
+                salesService.getStats(),
+                salesService.getSimulations(),
+                salesService.getOpportunities()
+            ]);
 
-    // Mock Data for Intelligence Lists
-    const remarketingList = [
-        { id: 1, name: 'Fernanda Lima', car: 'Jeep Compass', date: 'Há 3 dias', status: 'Aprovado', deal: 'R$ 1.850/mês', cpf: '123.456.789-00', phone: '(11) 99999-1111', income: 6500, email: 'fernanda@email.com' },
-        { id: 2, name: 'Marcos Paulo', car: 'Toyota Corolla', date: 'Há 5 dias', status: 'Aprovado', deal: 'R$ 2.100/mês', cpf: '222.987.654-22', phone: '(11) 98888-2222', income: 8200, email: 'marcos@email.com' },
-        { id: 3, name: 'Julia Roberts', car: 'Fiat Pulse', date: 'Há 7 dias', status: 'Aprovado', deal: 'R$ 1.450/mês', cpf: '333.123.456-33', phone: '(21) 97777-3333', income: 5000, email: 'julia@email.com' },
-        { id: 4, name: 'Carlos Andrade', car: 'Honda City', date: 'Há 1 dia', status: 'Aprovado', deal: 'R$ 1.900/mês', cpf: '444.321.654-44', phone: '(31) 96666-4444', income: 7000, email: 'carlos@email.com' },
-        { id: 5, name: 'Luciana Mello', car: 'Renault Kwid', date: 'Há 2 dias', status: 'Aprovado', deal: 'R$ 900/mês', cpf: '555.789.123-55', phone: '(41) 95555-5555', income: 3200, email: 'luciana@email.com' },
-    ];
+            setSalesData(stats.monthlyPerformance || []);
+            setBankPerformanceData(stats.bankPerformance || []);
+            setKpiData({
+                todaySims: stats.todaySimulations,
+                todayApprovals: stats.todayApprovals,
+                totalFinanced: stats.totalFinanced
+            });
 
-    const retryList = [
-        { id: 4, name: 'Ricardo Almeida', car: 'Honda HR-V', date: 'Há 35 dias', income: 4500, newScore: 520, cpf: '666.888.999-66', phone: '(11) 94444-6666', email: 'ricardo@email.com' },
-        { id: 5, name: 'Eliane Santos', car: 'VW T-Cross', date: 'Há 42 dias', income: 12000, newScore: null, cpf: '777.111.222-77', phone: '(21) 93333-7777', email: 'eliane@email.com' },
-        { id: 6, name: 'Bruno Dias', car: 'Chevrolet Tracker', date: 'Há 60 dias', income: 5800, newScore: 680, cpf: '888.333.444-88', phone: '(31) 92222-8888', email: 'bruno@email.com' },
-        { id: 7, name: 'Sérgio Ramos', car: 'Ford Ranger', date: 'Há 32 dias', income: 15000, newScore: 480, cpf: '999.555.666-99', phone: '(41) 91111-9999', email: 'sergio@email.com' },
-        { id: 8, name: 'Paula Diniz', car: 'Peugeot 208', date: 'Há 45 dias', income: 3800, newScore: 710, cpf: '000.222.333-00', phone: '(51) 90000-0000', email: 'paula@email.com' },
-    ];
+            // Map and format simulation history
+            if (Array.isArray(simulations)) {
+                setSimulationHistory(simulations.map((s: any) => ({
+                    id: s.id,
+                    client: s.client_name,
+                    vehicle: s.vehicle_description,
+                    date: s.created_at?.split('T')[0] || '',
+                    status: s.status,
+                    bank: s.bank_name,
+                    rate: 0 // Placeholder, or extract from result_data
+                })));
+            }
 
-    const simulationHistory = [
-        { id: 101, client: 'Roberto Silva', vehicle: 'Honda Civic', date: '2023-10-25', status: 'Aprovado', bank: 'Itaú', rate: 1.89 },
-        { id: 102, client: 'Ana Souza', vehicle: 'Toyota Corolla', date: '2023-10-25', status: 'Reprovado', bank: '-', rate: 0 },
-        { id: 103, client: 'Carlos Oliveira', vehicle: 'Jeep Compass', date: '2023-10-24', status: 'Aprovado', bank: 'Santander', rate: 1.95 },
-        { id: 104, client: 'Mariana Costa', vehicle: 'Fiat Pulse', date: '2023-10-24', status: 'Análise', bank: '-', rate: 0 },
-        { id: 105, client: 'Pedro Santos', vehicle: 'Chevrolet Onix', date: '2023-05-22', status: 'Aprovado', bank: 'BV', rate: 2.10 },
-        { id: 106, client: 'Lucas Pereira', vehicle: 'VW Nivus', date: '2023-10-23', status: 'Aprovado', bank: 'Bradesco', rate: 1.75 },
-        { id: 107, client: 'Juliana Melo', vehicle: 'Fiat Toro', date: '2023-10-22', status: 'Reprovado', bank: '-', rate: 0 },
-        { id: 108, client: 'Rafael Costa', vehicle: 'Jeep Renegade', date: '2023-10-21', status: 'Aprovado', bank: 'Itaú', rate: 1.99 },
-        { id: 109, client: 'Beatriz Silva', vehicle: 'Honda HR-V', date: '2023-10-20', status: 'Aprovado', bank: 'Safra', rate: 2.05 },
-        { id: 110, client: 'Gustavo Lima', vehicle: 'Toyota Yaris', date: '2023-10-20', status: 'Análise', bank: '-', rate: 0 },
-    ];
+            if (opportunities) {
+                setRemarketingList(opportunities.remarketing || []);
+                setRetryList(opportunities.retry || []);
+            }
+
+        } catch (error) {
+            console.error("Error fetching statistics:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     const handleOpenClientDetails = (client: any) => {
         setSelectedOppClient(client);
@@ -100,13 +109,34 @@ export const Statistics = () => {
         });
     };
 
+    const handleContact = async (clientData: any, type: 'remarketing' | 'retry') => {
+        const message = generateMessage('FOLLOWUP', {
+            clientName: clientData.name,
+            vehicle: clientData.car
+        });
+
+        const link = getWhatsAppLink(clientData.phone || '00000000000', message);
+
+        // Log interaction in background
+        try {
+            await interactionsService.create({
+                clientId: clientData.id, // Ensure ID allows this, might need to fix if ID is simulation ID vs Client ID
+                type: 'WHATSAPP',
+                note: `Enviou mensagem de ${type}: ${message}`
+            });
+        } catch (err) {
+            console.error('Failed to log interaction', err);
+        }
+
+        window.open(link, '_blank');
+    };
+
     const handleExportClick = () => {
         setIsExportModalOpen(true);
     };
 
     const handleConfirmExport = () => {
         setIsExportModalOpen(false);
-        // Slight delay to allow modal to close before printing
         setTimeout(() => {
             window.print();
         }, 300);
@@ -116,9 +146,9 @@ export const Statistics = () => {
     const filteredHistory = simulationHistory
         .filter(item => {
             const matchesSearch =
-                item.client.toLowerCase().includes(historySearch.toLowerCase()) ||
-                item.vehicle.toLowerCase().includes(historySearch.toLowerCase()) ||
-                item.bank.toLowerCase().includes(historySearch.toLowerCase());
+                (item.client || '').toLowerCase().includes(historySearch.toLowerCase()) ||
+                (item.vehicle || '').toLowerCase().includes(historySearch.toLowerCase()) ||
+                (item.bank || '').toLowerCase().includes(historySearch.toLowerCase());
 
             const matchesStatus = historyStatusFilter === 'ALL' || item.status === historyStatusFilter;
 
@@ -128,9 +158,9 @@ export const Statistics = () => {
             if (!sortConfig) return 0;
             const { key, direction } = sortConfig;
             // @ts-ignore
-            const aValue = a[key];
+            const aValue = a[key] || '';
             // @ts-ignore
-            const bValue = b[key];
+            const bValue = b[key] || '';
             if (aValue < bValue) return direction === 'asc' ? -1 : 1;
             if (aValue > bValue) return direction === 'asc' ? 1 : -1;
             return 0;
@@ -156,14 +186,14 @@ export const Statistics = () => {
 
     const filteredOppList = currentOppList
         .filter((item: any) => {
-            return item.name.toLowerCase().includes(oppSearch.toLowerCase()) ||
-                item.car.toLowerCase().includes(oppSearch.toLowerCase());
+            return (item.name || '').toLowerCase().includes(oppSearch.toLowerCase()) ||
+                (item.car || '').toLowerCase().includes(oppSearch.toLowerCase());
         })
         .sort((a: any, b: any) => {
             if (!oppSortConfig) return 0;
             const { key, direction } = oppSortConfig;
-            const aValue = a[key];
-            const bValue = b[key];
+            const aValue = a[key] || '';
+            const bValue = b[key] || '';
             if (aValue < bValue) return direction === 'asc' ? -1 : 1;
             if (aValue > bValue) return direction === 'asc' ? 1 : -1;
             return 0;
@@ -185,8 +215,9 @@ export const Statistics = () => {
     };
 
     const formatDate = (dateString: string) => {
-        const [year, month, day] = dateString.split('-');
-        return `${day}/${month}`;
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
     };
 
     // --- PDF REPORT DATA GENERATION ---
@@ -198,8 +229,8 @@ export const Statistics = () => {
 
     const reportSummary = useMemo(() => {
         const total = reportHistory.length;
-        const approved = reportHistory.filter(i => i.status === 'Aprovado').length;
-        const rejected = reportHistory.filter(i => i.status === 'Reprovado').length;
+        const approved = reportHistory.filter(i => i.status === 'APPROVED' || i.status === 'Aprovado').length;
+        const rejected = reportHistory.filter(i => i.status?.includes('REJECT') || i.status === 'Reprovado').length;
         const approvalRate = total > 0 ? (approved / total) * 100 : 0;
         return { total, approved, rejected, approvalRate };
     }, [reportHistory]);
@@ -221,10 +252,10 @@ export const Statistics = () => {
                 {/* Top Charts */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <Card className="p-4 md:p-6">
-                        <h3 className="text-lg font-bold text-slate-900 mb-6">Desempenho Mensal (Últimos 5 meses)</h3>
+                        <h3 className="text-lg font-bold text-slate-900 mb-6">Desempenho Mensal (Vendas)</h3>
                         <div className="h-64">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={salesData}>
+                                <AreaChart data={salesData.length > 0 ? salesData : [{ name: 'Sem dados', value: 0 }]}>
                                     <defs>
                                         <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
@@ -248,7 +279,7 @@ export const Statistics = () => {
                         <h3 className="text-lg font-bold text-slate-900 mb-6">Aprovação por Banco (Total)</h3>
                         <div className="h-64">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={bankPerformanceData} layout="vertical">
+                                <BarChart data={bankPerformanceData.length > 0 ? bankPerformanceData : [{ name: 'Sem dados', aprovados: 0, reprovados: 0 }]} layout="vertical">
                                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
                                     <XAxis type="number" hide />
                                     <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} width={70} />
@@ -286,9 +317,9 @@ export const Statistics = () => {
                                 onChange={(e) => setHistoryStatusFilter(e.target.value)}
                             >
                                 <option value="ALL">Todos os Status</option>
-                                <option value="Aprovado">Aprovados</option>
-                                <option value="Reprovado">Reprovados</option>
-                                <option value="Análise">Em Análise</option>
+                                <option value="APPROVED">Aprovados</option>
+                                <option value="REJECTED">Reprovados</option>
+                                <option value="PENDING">Em Análise</option>
                             </select>
                         </div>
                     </div>
@@ -326,36 +357,29 @@ export const Statistics = () => {
                                             className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:bg-slate-100 select-none"
                                             onClick={() => requestSort('bank')}
                                         >
-                                            Melhor Banco <SortIcon columnKey="bank" />
-                                        </th>
-                                        <th
-                                            className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:bg-slate-100 select-none"
-                                            onClick={() => requestSort('rate')}
-                                        >
-                                            Taxa <SortIcon columnKey="rate" />
+                                            Banco <SortIcon columnKey="bank" />
                                         </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {filteredHistory.map((item) => (
+                                    {loading ? (
+                                        <tr><td colSpan={5} className="p-4 text-center">Carregando...</td></tr>
+                                    ) : filteredHistory.map((item) => (
                                         <tr key={item.id} className="hover:bg-slate-50">
                                             <td className="px-6 py-4 text-slate-500 text-sm whitespace-nowrap">{formatDate(item.date)}</td>
                                             <td className="px-6 py-4 font-medium text-slate-900">{item.client}</td>
                                             <td className="px-6 py-4 text-slate-600">{item.vehicle}</td>
                                             <td className="px-6 py-4">
-                                                <Badge variant={item.status === 'Aprovado' ? 'success' : item.status === 'Reprovado' ? 'danger' : 'warning'}>
+                                                <Badge variant={item.status === 'APPROVED' ? 'success' : item.status.includes('REJECT') ? 'danger' : 'warning'}>
                                                     {item.status}
                                                 </Badge>
                                             </td>
                                             <td className="px-6 py-4 text-slate-600">{item.bank}</td>
-                                            <td className="px-6 py-4 font-bold text-emerald-600 text-sm">
-                                                {item.rate > 0 ? `${item.rate.toFixed(2)}%` : '-'}
-                                            </td>
                                         </tr>
                                     ))}
-                                    {filteredHistory.length === 0 && (
+                                    {filteredHistory.length === 0 && !loading && (
                                         <tr>
-                                            <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                                            <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
                                                 Nenhuma simulação encontrada com os filtros atuais.
                                             </td>
                                         </tr>
@@ -417,131 +441,58 @@ export const Statistics = () => {
 
                         <div className="p-0">
                             <div className="max-h-[400px] overflow-auto custom-scrollbar">
-                                {activeTab === 'remarketing' && (
-                                    <table className="w-full text-left relative min-w-[600px]">
-                                        <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10 shadow-sm">
-                                            <tr>
-                                                <th
-                                                    className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:bg-slate-100 select-none"
-                                                    onClick={() => requestOppSort('name')}
-                                                >
-                                                    Cliente <OppSortIcon columnKey="name" />
-                                                </th>
-                                                <th
-                                                    className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:bg-slate-100 select-none"
-                                                    onClick={() => requestOppSort('car')}
-                                                >
-                                                    Veículo <OppSortIcon columnKey="car" />
-                                                </th>
-                                                <th
-                                                    className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:bg-slate-100 select-none"
-                                                    onClick={() => requestOppSort('date')}
-                                                >
-                                                    Data <OppSortIcon columnKey="date" />
-                                                </th>
-                                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Oferta</th>
-                                                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase">Ação</th>
+                                <table className="w-full text-left relative min-w-[600px]">
+                                    <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10 shadow-sm">
+                                        <tr>
+                                            <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Cliente</th>
+                                            <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Veículo</th>
+                                            <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Data</th>
+                                            <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {filteredOppList.map((item: any) => (
+                                            <tr key={item.id} className="hover:bg-slate-50">
+                                                <td className="px-6 py-4">
+                                                    <button
+                                                        onClick={() => handleOpenClientDetails(item)}
+                                                        className="font-medium text-emerald-600 hover:underline text-left focus:outline-none"
+                                                    >
+                                                        {item.name}
+                                                    </button>
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-600">{item.car}</td>
+                                                <td className="px-6 py-4 text-slate-500">{formatDate(item.date)}</td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="brand"
+                                                        className="mr-2"
+                                                        icon={<MessageCircle size={14} />}
+                                                        onClick={() => handleContact(item, activeTab)}
+                                                    >
+                                                        Contatar
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="secondary"
+                                                        icon={<PlayCircle size={14} />}
+                                                        onClick={() => handleSimulateAgain(item)}
+                                                    >
+                                                        Simular
+                                                    </Button>
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {filteredOppList.map((item: any) => (
-                                                <tr key={item.id} className="hover:bg-slate-50">
-                                                    <td className="px-6 py-4">
-                                                        <button
-                                                            onClick={() => handleOpenClientDetails(item)}
-                                                            className="font-medium text-emerald-600 hover:underline text-left focus:outline-none"
-                                                        >
-                                                            {item.name}
-                                                        </button>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-slate-600">{item.car}</td>
-                                                    <td className="px-6 py-4 text-slate-500">{item.date}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded text-xs">{item.deal}</span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <Button size="sm" variant="primary" icon={<Phone size={14} />} onClick={() => handleOpenClientDetails(item)}>Contatar</Button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {filteredOppList.length === 0 && (
-                                                <tr>
-                                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                                                        Nenhum cliente encontrado nesta lista.
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                )}
-
-                                {activeTab === 'retry' && (
-                                    <table className="w-full text-left relative min-w-[600px]">
-                                        <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10 shadow-sm">
+                                        ))}
+                                        {filteredOppList.length === 0 && (
                                             <tr>
-                                                <th
-                                                    className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:bg-slate-100 select-none"
-                                                    onClick={() => requestOppSort('name')}
-                                                >
-                                                    Cliente <OppSortIcon columnKey="name" />
-                                                </th>
-                                                <th
-                                                    className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:bg-slate-100 select-none"
-                                                    onClick={() => requestOppSort('car')}
-                                                >
-                                                    Veículo <OppSortIcon columnKey="car" />
-                                                </th>
-                                                <th
-                                                    className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:bg-slate-100 select-none"
-                                                    onClick={() => requestOppSort('date')}
-                                                >
-                                                    Data <OppSortIcon columnKey="date" />
-                                                </th>
-                                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Contato</th>
-                                                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase">Ação</th>
+                                                <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
+                                                    Nenhum cliente encontrado nesta lista.
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {filteredOppList.map((item: any) => (
-                                                <tr key={item.id} className="hover:bg-slate-50">
-                                                    <td className="px-6 py-4">
-                                                        <button
-                                                            onClick={() => handleOpenClientDetails(item)}
-                                                            className="font-medium text-emerald-600 hover:underline text-left focus:outline-none"
-                                                        >
-                                                            {item.name}
-                                                        </button>
-                                                        {item.newScore && <div className="text-xs text-emerald-600 mt-1 flex items-center gap-1"><TrendingUp size={10} /> Score: {item.newScore}</div>}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-slate-600">{item.car}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="text-amber-700 bg-amber-50 px-2 py-1 rounded text-xs border border-amber-100">{item.date}</span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-slate-600 text-sm font-medium">
-                                                        {item.phone}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <Button
-                                                            size="sm"
-                                                            variant="secondary"
-                                                            icon={<PlayCircle size={14} />}
-                                                            onClick={() => handleSimulateAgain(item)}
-                                                        >
-                                                            Simular
-                                                        </Button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {filteredOppList.length === 0 && (
-                                                <tr>
-                                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                                                        Nenhum cliente encontrado nesta lista.
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                )}
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </Card>
@@ -567,18 +518,12 @@ export const Statistics = () => {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="p-4 bg-slate-50 rounded-lg">
-                                    <p className="text-xs font-bold text-slate-500 uppercase mb-1">Contato</p>
-                                    <div className="flex items-center gap-2 text-sm text-slate-700 mb-1">
-                                        <Phone size={14} /> {selectedOppClient.phone}
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm text-slate-700">
-                                        <Mail size={14} /> {selectedOppClient.email}
-                                    </div>
-                                </div>
-                                <div className="p-4 bg-slate-50 rounded-lg">
                                     <p className="text-xs font-bold text-slate-500 uppercase mb-1">Dados Pessoais</p>
                                     <p className="text-sm text-slate-700">CPF: {selectedOppClient.cpf}</p>
-                                    <p className="text-sm text-slate-700 mt-1">Renda: <span className="font-bold text-emerald-600">R$ {selectedOppClient.income?.toLocaleString()}</span></p>
+                                </div>
+                                <div className="p-4 bg-slate-50 rounded-lg">
+                                    <p className="text-xs font-bold text-slate-500 uppercase mb-1">Status Anterior</p>
+                                    <p className="text-sm text-slate-700">{selectedOppClient.status}</p>
                                 </div>
                             </div>
 
@@ -713,42 +658,6 @@ export const Statistics = () => {
                             {reportHistory.length === 0 && (
                                 <tr><td colSpan={5} className="px-3 py-4 text-center text-slate-500">Nenhum registro neste período.</td></tr>
                             )}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Opportunities Table */}
-                <div className="break-inside-avoid">
-                    <h2 className="text-lg font-bold text-slate-900 mb-4 border-b border-slate-200 pb-2">Oportunidades em Aberto (Remarketing & Repescagem)</h2>
-                    <table className="w-full text-left text-sm border border-slate-200">
-                        <thead className="bg-slate-100">
-                            <tr>
-                                <th className="px-3 py-2 border-b border-slate-200 font-semibold">Tipo</th>
-                                <th className="px-3 py-2 border-b border-slate-200 font-semibold">Cliente</th>
-                                <th className="px-3 py-2 border-b border-slate-200 font-semibold">Veículo</th>
-                                <th className="px-3 py-2 border-b border-slate-200 font-semibold">Contato</th>
-                                <th className="px-3 py-2 border-b border-slate-200 font-semibold">Obs</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {remarketingList.map(item => (
-                                <tr key={item.id} className="border-b border-slate-100">
-                                    <td className="px-3 py-2"><span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-1 rounded">Remarketing</span></td>
-                                    <td className="px-3 py-2">{item.name}</td>
-                                    <td className="px-3 py-2">{item.car}</td>
-                                    <td className="px-3 py-2">{item.phone}</td>
-                                    <td className="px-3 py-2 text-xs text-slate-500">Aprovado: {item.deal}</td>
-                                </tr>
-                            ))}
-                            {retryList.map(item => (
-                                <tr key={item.id} className="border-b border-slate-100">
-                                    <td className="px-3 py-2"><span className="text-xs font-bold text-amber-700 bg-amber-100 px-1 rounded">Repescagem</span></td>
-                                    <td className="px-3 py-2">{item.name}</td>
-                                    <td className="px-3 py-2">{item.car}</td>
-                                    <td className="px-3 py-2">{item.phone}</td>
-                                    <td className="px-3 py-2 text-xs text-slate-500">Recusa: {item.date}</td>
-                                </tr>
-                            ))}
                         </tbody>
                     </table>
                 </div>

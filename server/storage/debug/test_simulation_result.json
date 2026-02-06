@@ -1,0 +1,110 @@
+{
+  "bankId": "itau",
+  "status": "SUCCESS",
+  "offers": [
+    {
+      "bankId": "itau",
+      "installments": 60,
+      "monthlyPayment": 925,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "60× R$ 925,00"
+    },
+    {
+      "bankId": "itau",
+      "installments": 60,
+      "monthlyPayment": 925,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "60× R$ 925,00"
+    },
+    {
+      "bankId": "itau",
+      "installments": 60,
+      "monthlyPayment": 925,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "60× R$ 925,00"
+    },
+    {
+      "bankId": "itau",
+      "installments": 48,
+      "monthlyPayment": 1008.23,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "48× R$ 1.008,23"
+    },
+    {
+      "bankId": "itau",
+      "installments": 48,
+      "monthlyPayment": 1008.23,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "48× R$ 1.008,23"
+    },
+    {
+      "bankId": "itau",
+      "installments": 42,
+      "monthlyPayment": 1093.52,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "42× R$ 1.093,52"
+    },
+    {
+      "bankId": "itau",
+      "installments": 42,
+      "monthlyPayment": 1093.52,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "42× R$ 1.093,52"
+    },
+    {
+      "bankId": "itau",
+      "installments": 36,
+      "monthlyPayment": 1202.38,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "36× R$ 1.202,38"
+    },
+    {
+      "bankId": "itau",
+      "installments": 36,
+      "monthlyPayment": 1202.38,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "36× R$ 1.202,38"
+    },
+    {
+      "bankId": "itau",
+      "installments": 24,
+      "monthlyPayment": 1602.39,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "24× R$ 1.602,39"
+    },
+    {
+      "bankId": "itau",
+      "installments": 24,
+      "monthlyPayment": 1602.39,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "24× R$ 1.602,39"
+    },
+    {
+      "bankId": "itau",
+      "installments": 18,
+      "monthlyPayment": 2022.77,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "18× R$ 2.022,77"
+    },
+    {
+      "bankId": "itau",
+      "installments": 18,
+      "monthlyPayment": 2022.77,
+      "totalValue": 0,
+      "interestRate": 0,
+      "description": "18× R$ 2.022,77"
+    }
+  ]
+}

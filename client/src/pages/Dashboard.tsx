@@ -7,8 +7,8 @@ import {
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
-import { Button, Card, Badge } from '../../components/ui';
-import { salesService } from '../../services/api';
+import { Button, Card, Badge } from '../components/ui';
+import { salesService } from '../services/api';
 
 interface DashboardStats {
     todaySimulations: number;

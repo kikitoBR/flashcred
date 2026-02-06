@@ -1,0 +1,14 @@
+<!DOCTYPE html><html lang="pt-br"><head>
+    <title></title>
+    <script>
+      var search = location.search;
+      var code = new URLSearchParams(search).get('code');
+      if (code && code.length > 0) {
+        window.parent.postMessage({ type: 'authCode', code }, '*');
+      } else {
+        window.parent.postMessage(null);
+      }
+    </script>
+  </head>
+<body>
+</body></html>

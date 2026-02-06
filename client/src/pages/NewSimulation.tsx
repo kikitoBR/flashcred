@@ -5,10 +5,10 @@ import {
     CheckSquare, Square, PlayCircle, Zap, Loader2, TrendingUp, AlertCircle, CheckCircle2, PartyPopper, ChevronDown, Unplug, Info
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { Client, SimulationOffer, Vehicle } from '../../types';
-import { rpaService } from '../../services/api';
-import { BANKS } from '../../constants';
-import { Badge, Button, Card, Input, Modal } from '../../components/ui';
+import { Client, SimulationOffer, Vehicle } from '../types';
+import { rpaService } from '../services/api';
+import { BANKS } from '../constants';
+import { Badge, Button, Card, Input, Modal } from '../components/ui';
 
 export const NewSimulation = () => {
     const { clients, vehicles, updateClientScore, setVehicles } = useAppContext();
@@ -173,7 +173,7 @@ export const NewSimulation = () => {
         setStep(3); // Loading state
 
         // Split banks
-        const rpaBankIds = ['6']; // ID from constants.ts for C6 Bank
+        const rpaBankIds = ['6', '3']; // IDs from constants.ts for C6 Bank and Itau
         const selectedRpaBanks = selectedBanks.filter(id => rpaBankIds.includes(id));
         const selectedMockBanks = selectedBanks.filter(id => !rpaBankIds.includes(id));
 
@@ -532,8 +532,8 @@ export const NewSimulation = () => {
                                                                 R$ {v.price?.toLocaleString('pt-BR')}
                                                             </span>
                                                             <span className={`text-[10px] px-1.5 py-0.5 rounded ${v.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-700' :
-                                                                    v.status === 'RESERVED' ? 'bg-amber-100 text-amber-700' :
-                                                                        'bg-slate-100 text-slate-500'
+                                                                v.status === 'RESERVED' ? 'bg-amber-100 text-amber-700' :
+                                                                    'bg-slate-100 text-slate-500'
                                                                 }`}>
                                                                 {v.status === 'AVAILABLE' ? 'Disponível' : v.status === 'RESERVED' ? 'Reservado' : 'Vendido'}
                                                             </span>

@@ -17,6 +17,7 @@ app.use(express.json());
 import clientRoutes from './routes/clients';
 import vehicleRoutes from './routes/vehicles';
 import salesRoutes from './routes/sales';
+import interactionRoutes from './routes/interactions';
 
 // Apply tenant middleware to API routes
 app.use('/api', tenantMiddleware);
@@ -25,6 +26,7 @@ app.use('/api', tenantMiddleware);
 app.use('/api/clients', clientRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/sales', salesRoutes);
+app.use('/api/interactions', interactionRoutes);
 
 app.get('/', (req, res) => {
     res.send('FlashCred Server Running (Multi-Tenant)');

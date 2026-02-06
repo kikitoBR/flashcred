@@ -5,11 +5,11 @@ import {
     Car, Search, Plus, Upload, X, ChevronLeft, ChevronRight, Edit2, Trash2
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { Vehicle } from '../../types';
+import { Vehicle } from '../types';
 import { Badge, Button, Card, Input, Modal } from '../components/ui';
 import { VehicleDetailsModal } from '../components/VehicleDetailsModal';
 import { SaleRegistrationModal } from '../components/SaleRegistrationModal';
-import { vehicleService } from '../../services/api';
+import { vehicleService } from '../services/api';
 
 export const Vehicles = () => {
     const navigate = useNavigate();

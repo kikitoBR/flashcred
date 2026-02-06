@@ -2,49 +2,57 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    History, Search, Filter, RefreshCw, DollarSign, Calendar, User, Car, Building2, TrendingUp, Download
+    History, Search, Filter, RefreshCw, DollarSign, Calendar, User, Car, Building2, TrendingUp, Download, Plus
 } from 'lucide-react';
-import { Button, Card, Badge } from '../../components/ui';
-import { salesService } from '../../services/api';
-
-interface Sale {
-    id: string;
-    client_name: string;
-    client_cpf: string;
-    vehicle_description: string;
-    bank_name: string;
-    financed_value: number;
-    down_payment: number;
-    installments: number;
-    monthly_payment: number;
-    interest_rate: number;
-    status: string;
-    sale_date: string;
-    created_at: string;
-}
+import { Button, Card, Badge } from '../components/ui';
+import { SaleRegistrationModal } from '../components/SaleRegistrationModal';
+import { salesService, clientService, vehicleService } from '../services/api';
+import { Sale, Client, Vehicle } from '../types';
 
 export const SalesHistory = () => {
     const navigate = useNavigate();
     const [sales, setSales] = useState<Sale[]>([]);
+    const [clients, setClients] = useState<Client[]>([]);
+    const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
 
-    const fetchSales = async () => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const fetchData = async () => {
         try {
             setLoading(true);
-            const data = await salesService.getAll();
-            setSales(data);
+            const [salesData, clientsData, vehiclesData] = await Promise.all([
+                salesService.getAll(),
+                clientService.getAll(),
+                vehicleService.getAll()
+            ]);
+            setSales(salesData);
+            setClients(clientsData);
+            setVehicles(vehiclesData);
         } catch (error) {
-            console.error('Error fetching sales:', error);
+            console.error('Error fetching data:', error);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchSales();
+        fetchData();
     }, []);
+
+    const handleCreateSale = async (saleData: any) => {
+        try {
+            await salesService.create(saleData);
+            setIsModalOpen(false);
+            fetchData(); // Refresh list
+        } catch (error) {
+            console.error('Error creating sale:', error);
+            alert('Erro ao registrar venda');
+        }
+    };
 
     // Filter sales
     const filteredSales = sales.filter(sale => {
@@ -58,6 +66,8 @@ export const SalesHistory = () => {
     // Calculate totals
     const totalFinanced = filteredSales.reduce((acc, sale) => acc + (sale.financed_value || 0), 0);
     const totalCount = filteredSales.length;
+
+    // Simplificando o filtro de aprovados para evitar erro de tipos/dados ausentes
     const approvedCount = filteredSales.filter(s => s.status === 'FINALIZED' || s.status === 'APPROVED').length;
 
     const formatCurrency = (value: number) => {
@@ -66,7 +76,9 @@ export const SalesHistory = () => {
 
     const formatDate = (date: string) => {
         if (!date) return 'N/A';
-        return new Date(date).toLocaleDateString('pt-BR');
+        // Ajuste para evitar problemas com timezones se vier só a data YYYY-MM-DD
+        const d = new Date(date);
+        return d.toLocaleDateString('pt-BR');
     };
 
     const getStatusBadge = (status: string) => {
@@ -96,11 +108,15 @@ export const SalesHistory = () => {
                     <p className="text-slate-500 text-sm">Acompanhe todas as vendas realizadas</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="ghost" icon={<RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />} onClick={fetchSales}>
+                    <Button variant="ghost" icon={<RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />} onClick={fetchData}>
                         Atualizar
                     </Button>
-                    <Button variant="outline" icon={<Download className="w-4 h-4" />}>
-                        Exportar
+                    <Button
+                        variant="brand"
+                        icon={<Plus className="w-4 h-4" />}
+                        onClick={() => setIsModalOpen(true)}
+                    >
+                        Nova Venda
                     </Button>
                 </div>
             </div>
@@ -176,7 +192,7 @@ export const SalesHistory = () => {
                                     <td colSpan={7} className="px-6 py-12 text-center">
                                         <History className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                                         <p className="text-slate-500 font-medium">Nenhuma venda encontrada</p>
-                                        <p className="text-slate-400 text-sm">Finalize uma simulação para registrar uma venda</p>
+                                        <p className="text-slate-400 text-sm">Registre uma nova venda manualmente ou via simulação.</p>
                                     </td>
                                 </tr>
                             ) : (
@@ -207,7 +223,7 @@ export const SalesHistory = () => {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <p className="font-bold text-slate-900">{formatCurrency(sale.financed_value)}</p>
-                                            {sale.monthly_payment && (
+                                            {sale.monthly_payment > 0 && (
                                                 <p className="text-xs text-slate-500">{formatCurrency(sale.monthly_payment)}/mês</p>
                                             )}
                                         </td>
@@ -222,7 +238,7 @@ export const SalesHistory = () => {
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2 text-slate-500 text-sm">
                                                 <Calendar className="w-4 h-4" />
-                                                {formatDate(sale.sale_date || sale.created_at)}
+                                                {formatDate(sale.sale_date || sale.created_at || '')}
                                             </div>
                                         </td>
                                     </tr>
@@ -238,6 +254,14 @@ export const SalesHistory = () => {
                     </div>
                 )}
             </Card>
+
+            <SaleRegistrationModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                clients={clients}
+                vehicles={vehicles} // Passando a lista completa
+                onConfirm={handleCreateSale}
+            />
         </div>
     );
 };

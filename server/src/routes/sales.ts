@@ -20,61 +20,103 @@ router.get('/', async (req, res: any) => {
     }
 });
 
+// GET /api/sales/simulations - Get all simulations history
+router.get('/simulations', async (req, res: any) => {
+    try {
+        const tenantId = req.tenant.id;
+        const simulations = await query(
+            `SELECT * FROM simulations WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 100`,
+            [tenantId]
+        );
+        res.json(simulations);
+    } catch (error) {
+        console.error('Error fetching simulations:', error);
+        res.status(500).json({ error: 'Failed to fetch simulations' });
+    }
+});
+
+// GET /api/sales/opportunities - Get opportunities (Remarketing/Retry)
+router.get('/opportunities', async (req, res: any) => {
+    try {
+        const tenantId = req.tenant.id;
+
+        // Remarketing: Approved simulations from > 3 (arbitrary) days ago
+        const remarketing = await query(
+            `SELECT id, client_name as name, vehicle_description as car, created_at as date, status, 
+                    client_cpf as cpf, 'N/A' as phone, 0 as income, 'N/A' as email
+             FROM simulations 
+             WHERE tenant_id = ? AND status = 'APPROVED' AND created_at < DATE_SUB(NOW(), INTERVAL 3 DAY)
+             LIMIT 50`,
+            [tenantId]
+        );
+
+        // Retry: Rejected simulations from > 7 days ago
+        const retry = await query(
+            `SELECT id, client_name as name, vehicle_description as car, created_at as date, 
+                    client_cpf as cpf, 'N/A' as phone, 0 as income, 'N/A' as email
+             FROM simulations 
+             WHERE tenant_id = ? AND status LIKE 'REJECT%' AND created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)
+             LIMIT 50`,
+            [tenantId]
+        );
+
+        res.json({ remarketing, retry });
+    } catch (error) {
+        console.error('Error fetching opportunities:', error);
+        res.status(500).json({ error: 'Failed to fetch opportunities' });
+    }
+});
+
 // GET /api/sales/stats - Get sales statistics
 router.get('/stats', async (req, res: any) => {
     try {
         const tenantId = req.tenant.id;
-
-        // Today's date
         const today = new Date().toISOString().split('T')[0];
 
-        // Get today's simulations count
-        const [todaySimsResult] = await query(
+        // Basic KPI counts
+        const [todaySims] = await query(
             `SELECT COUNT(*) as count FROM simulations WHERE tenant_id = ? AND DATE(created_at) = ?`,
             [tenantId, today]
         ) as any[];
 
-        // Get today's approvals count
-        const [todayApprovalsResult] = await query(
+        const [todayApprovals] = await query(
             `SELECT COUNT(*) as count FROM simulations WHERE tenant_id = ? AND DATE(created_at) = ? AND status = 'APPROVED'`,
             [tenantId, today]
         ) as any[];
 
-        // Get total financed value (all time)
-        const [totalFinancedResult] = await query(
+        const [totalFinanced] = await query(
             `SELECT COALESCE(SUM(financed_value), 0) as total FROM sales WHERE tenant_id = ? AND status = 'FINALIZED'`,
             [tenantId]
         ) as any[];
 
-        // Get weekly performance data
-        const weeklyData = await query(
-            `SELECT 
-                DAYOFWEEK(created_at) as day_of_week,
-                COUNT(*) as count
-             FROM simulations 
-             WHERE tenant_id = ? 
-               AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-             GROUP BY DAYOFWEEK(created_at)
-             ORDER BY day_of_week`,
+        // Monthly Performance (last 5 months sales)
+        // Note: Using hardcoded months if no data exists could be an option, but let's try real data.
+        const monthlyData = await query(
+            `SELECT DATE_FORMAT(sale_date, '%b') as name, SUM(financed_value) as value 
+             FROM sales 
+             WHERE tenant_id = ? AND sale_date >= DATE_SUB(NOW(), INTERVAL 5 MONTH)
+             GROUP BY DATE_FORMAT(sale_date, '%Y-%m'), DATE_FORMAT(sale_date, '%b')
+             ORDER BY DATE_FORMAT(sale_date, '%Y-%m')`,
             [tenantId]
         );
 
-        // Get recent simulations
-        const recentSimulations = await query(
-            `SELECT id, client_name, vehicle_description, bank_name, status, created_at 
+        // Bank Performance
+        const bankData = await query(
+            `SELECT bank_name as name, 
+                    SUM(CASE WHEN status = 'APPROVED' THEN 1 ELSE 0 END) as aprovados,
+                    SUM(CASE WHEN status = 'REJECTED' OR status = 'Reprovado' THEN 1 ELSE 0 END) as reprovados
              FROM simulations 
              WHERE tenant_id = ? 
-             ORDER BY created_at DESC 
-             LIMIT 5`,
+             GROUP BY bank_name`,
             [tenantId]
         );
 
         res.json({
-            todaySimulations: todaySimsResult?.count || 0,
-            todayApprovals: todayApprovalsResult?.count || 0,
-            totalFinanced: totalFinancedResult?.total || 0,
-            weeklyData: weeklyData,
-            recentSimulations: recentSimulations
+            todaySimulations: todaySims?.count || 0,
+            todayApprovals: todayApprovals?.count || 0,
+            totalFinanced: totalFinanced?.total || 0,
+            monthlyPerformance: monthlyData,
+            bankPerformance: bankData
         });
     } catch (error) {
         console.error('Error fetching sales stats:', error);
@@ -87,20 +129,9 @@ router.post('/', async (req, res: any) => {
     try {
         const tenantId = req.tenant.id;
         const {
-            clientId,
-            clientName,
-            clientCpf,
-            vehicleId,
-            vehicleDescription,
-            bankId,
-            bankName,
-            financedValue,
-            downPayment,
-            installments,
-            monthlyPayment,
-            interestRate,
-            status,
-            saleDate
+            clientId, clientName, clientCpf, vehicleId, vehicleDescription,
+            bankId, bankName, financedValue, downPayment, installments,
+            monthlyPayment, interestRate, status, saleDate
         } = req.body;
 
         const id = uuidv4();
@@ -126,15 +157,8 @@ router.post('/simulation', async (req, res: any) => {
     try {
         const tenantId = req.tenant.id;
         const {
-            clientId,
-            clientName,
-            clientCpf,
-            vehicleId,
-            vehicleDescription,
-            bankId,
-            bankName,
-            status,
-            resultData
+            clientId, clientName, clientCpf, vehicleId, vehicleDescription,
+            bankId, bankName, status, resultData
         } = req.body;
 
         const id = uuidv4();

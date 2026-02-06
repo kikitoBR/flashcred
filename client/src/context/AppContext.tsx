@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Client, Vehicle, BankCredential } from '../../types';
-import { clientService, vehicleService } from '../../services/api';
+import { Client, Vehicle, BankCredential } from '../types';
+import { clientService, vehicleService } from '../services/api';
 
 export interface AppContextType {
     clients: Client[];
