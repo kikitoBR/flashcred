@@ -173,7 +173,7 @@ export const NewSimulation = () => {
         setStep(3); // Loading state
 
         // Split banks
-        const rpaBankIds = ['6', '3']; // IDs from constants.ts for C6 Bank and Itau
+        const rpaBankIds = ['6', '3', '8']; // IDs from constants.ts for C6 Bank, Itau, and BV
         const selectedRpaBanks = selectedBanks.filter(id => rpaBankIds.includes(id));
         const selectedMockBanks = selectedBanks.filter(id => !rpaBankIds.includes(id));
 
@@ -188,22 +188,10 @@ export const NewSimulation = () => {
                     banks: selectedRpaBanks
                 });
                 // Map RPA results to SimulationOffer schema
-                return rpaResults.filter((r: any) => r.success).map((r: any) => {
-                    const installments = r.offers.map((o: any) => ({
-                        months: o.months,
-                        value: o.value
-                    })).sort((a: any, b: any) => b.months - a.months);
-
-                    return {
-                        bankId: r.bankId,
-                        status: 'APPROVED',
-                        interestRate: 0,
-                        maxInstallments: Math.max(...installments.map((i: any) => i.months)),
-                        downPayment: downPayment,
-                        installments: installments,
-                        reason: r.details
-                    };
-                });
+                if (rpaResults && rpaResults.offers) {
+                    return rpaResults.offers;
+                }
+                return [];
             } catch (error) {
                 console.error("RPA Error:", error);
                 return [];
@@ -697,21 +685,38 @@ export const NewSimulation = () => {
                                             </div>
 
                                             {offer.status === 'APPROVED' ? (
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                                                    <div className="p-3 bg-slate-50 rounded-lg text-center">
-                                                        <p className="text-xs text-slate-500 uppercase">Taxa</p>
-                                                        <p className="text-lg font-bold text-emerald-600">{offer.interestRate}%</p>
-                                                    </div>
-                                                    <div className="p-3 bg-slate-50 rounded-lg text-center">
-                                                        <p className="text-xs text-slate-500 uppercase">Entrada</p>
-                                                        <p className="text-lg font-bold text-slate-900">R$ {offer.downPayment.toLocaleString()}</p>
-                                                    </div>
-                                                    <div className="col-span-2 p-3 bg-emerald-50/50 border border-emerald-100 rounded-lg flex items-center justify-between px-4">
-                                                        <div>
-                                                            <p className="text-xs text-emerald-700 font-bold uppercase">Sugestão (48x)</p>
-                                                            <p className="text-xl font-bold text-emerald-700">R$ {offer.installments.find(i => i.months === 48)?.value.toLocaleString()}</p>
-                                                        </div>
-                                                        <Button size="sm" variant="primary" icon={<CheckCircle2 size={16} />} onClick={() => handleFinalizeSale(offer)}>Fechar</Button>
+                                                <div className="col-span-2 md:col-span-4 mt-4">
+                                                    <p className="text-xs font-bold text-slate-500 uppercase mb-3">Opções de Parcelamento</p>
+                                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                        {offer.installments.sort((a, b) => b.months - a.months).map((inst) => (
+                                                            <div
+                                                                key={inst.months}
+                                                                onClick={() => handleFinalizeSale(offer)}
+                                                                className={`p-3 rounded-lg border cursor-pointer hover:border-emerald-500 transition-all relative overflow-hidden group ${inst.hasHighChance ? 'bg-emerald-50/50 border-emerald-200 ring-1 ring-emerald-100' : 'bg-white border-slate-100'}`}
+                                                            >
+                                                                {inst.hasHighChance && (
+                                                                    <div className="absolute top-0 right-0 bg-emerald-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg z-10">
+                                                                        Alta Chance
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex flex-col gap-1">
+                                                                    <div className="flex items-baseline gap-1">
+                                                                        <span className="text-lg font-bold text-slate-900">{inst.months}x</span>
+                                                                        <span className="text-sm font-bold text-emerald-600">R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                                    </div>
+                                                                    {inst.interestRate ? (
+                                                                        <p className="text-[10px] text-slate-400 font-medium">{inst.interestRate.toFixed(2)}% a.m.</p>
+                                                                    ) : (
+                                                                        <p className="text-[10px] text-slate-300">-</p>
+                                                                    )}
+                                                                </div>
+                                                                <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-2 right-2">
+                                                                    <div className="bg-emerald-500 text-white p-1 rounded-full shadow-sm">
+                                                                        <CheckCircle2 size={12} />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 </div>
                                             ) : (

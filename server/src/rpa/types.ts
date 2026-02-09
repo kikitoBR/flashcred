@@ -36,6 +36,7 @@ export interface SimulationOffer {
     interestRate: number;
     totalValue: number;
     description?: string;
+    hasHighChance?: boolean;
 }
 
 export interface SimulationResult {

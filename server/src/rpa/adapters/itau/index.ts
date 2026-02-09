@@ -138,8 +138,8 @@ export class ItauAdapter implements BankAdapter {
                         await page.keyboard.press('Control+A');
                         await page.keyboard.press('Backspace');
 
-                        console.log(`[ItauAdapter] Typing new value: ${input.downPayment}`);
-                        await page.keyboard.type(input.downPayment.toString(), { delay: 100 });
+                        console.log(`[ItauAdapter] Typing new value (in cents): ${Math.round(input.downPayment * 100)}`);
+                        await page.keyboard.type(Math.round(input.downPayment * 100).toString(), { delay: 100 });
                         await page.waitForTimeout(500);
                         await page.keyboard.press('Tab');
 
@@ -170,44 +170,83 @@ export class ItauAdapter implements BankAdapter {
             // Optional: Save page content for debug if in dev mode
             // fs.writeFileSync('debug_offers_page.html', pageContent);
 
-            const offers = await page.evaluate(() => {
-                // Try specific cards first
-                let cards = Array.from(document.querySelectorAll('.ids-card, .offer-card, app-simulation-card'));
+            const offersData = await page.evaluate(() => {
+                const results: any[] = [];
 
-                // If no cards, try broad search for any block with "x R$" (installments pattern)
-                if (cards.length === 0) {
-                    // Look for text nodes or simpler containers
-                    const allDivs = Array.from(document.querySelectorAll('div, span, p'));
-                    return allDivs
-                        .map(d => (d as HTMLElement).innerText?.replace(/\n/g, ' ').trim())
-                        .filter(t => t && /\d+\s*[x×]\s*R\$/.test(t)) // Must contain "Nx R$"
-                        .filter((t, i, self) => self.indexOf(t) === i) // Unique
-                        .slice(0, 10); // Limit to avoid spam
+                try {
+                    // Strategy 1: Specific Cards
+                    const cards = Array.from(document.querySelectorAll('.ids-card, .offer-card, app-simulation-card, .card-offer, label.ids-radio-button, div[class*="card"]'));
+
+                    cards.forEach(card => {
+                        const text = (card as HTMLElement).innerText;
+                        if (!text) return;
+
+                        const mainMatch = text.match(/(\d+)\s*[x×]\s*R\$\s*([\d.,]+)/);
+                        if (mainMatch) {
+                            const rateMatch = text.match(/([\d.,]+)%\s*ao\s*mês/);
+                            results.push({
+                                installments: parseInt(mainMatch[1]),
+                                monthlyPayment: parseFloat(mainMatch[2].replace(/\./g, '').replace(',', '.')),
+                                interestRate: rateMatch ? parseFloat(rateMatch[1].replace(',', '.')) : 0,
+                                hasHighChance: text.toLowerCase().includes('alta chance'),
+                                description: text.substring(0, 50),
+                                source: 'card'
+                            });
+                        }
+                    });
+
+                    // Strategy 2: Broad Fallback (if specific cards failed)
+                    if (results.length === 0) {
+                        const allDivs = Array.from(document.querySelectorAll('div, span, label'));
+                        allDivs.forEach(div => {
+                            const text = (div as HTMLElement).innerText;
+                            if (!text || text.length > 100) return;
+
+                            const match = text.match(/^(\d+)\s*[x×]\s*R\$\s*([\d.,]+)/);
+                            if (match) {
+                                results.push({
+                                    installments: parseInt(match[1]),
+                                    monthlyPayment: parseFloat(match[2].replace(/\./g, '').replace(',', '.')),
+                                    interestRate: 0,
+                                    hasHighChance: false,
+                                    description: text,
+                                    source: 'fallback'
+                                });
+                            }
+                        });
+                    }
+                } catch (e) {
+                    // Safe cleanup
                 }
 
-                return cards.map(c => {
-                    return (c as HTMLElement).innerText.replace(/\n/g, ' ').trim();
-                }).filter(t => (t.includes('R$') && (t.includes('x') || t.includes('×'))) || t.includes('meses'));
+                // Deduplicate by installments
+                const unique = new Map();
+                results.forEach(r => {
+                    const existing = unique.get(r.installments);
+                    // Prefer offers that captured the rate or came from a specific card selector
+                    if (!existing ||
+                        (r.source === 'card' && existing.source === 'fallback') ||
+                        (r.interestRate > 0 && existing.interestRate === 0) ||
+                        (r.hasHighChance && !existing.hasHighChance)) {
+                        unique.set(r.installments, r);
+                    }
+                });
+
+                return Array.from(unique.values()).sort((a: any, b: any) => b.installments - a.installments);
             });
 
-            console.log(`[ItauAdapter] Extracted ${offers.length} potential offer strings.`);
-            console.log('[ItauAdapter] Raw strings:', offers);
+            console.log(`[ItauAdapter] Extracted ${offersData.length} unique offers.`);
+            console.log('[ItauAdapter] Offers:', offersData);
 
-            result.offers = offers.map(text => {
-                // Regex matches: "48x R$ 866,00", "48 x R$ 866,00", "48 vezes de R$ ..."
-                const match = text.match(/(\d+)\s*[x×vezes\sde]+\s*R\$?\s*([\d.,]+)/i);
-                if (match) {
-                    return {
-                        bankId: 'itau',
-                        installments: parseInt(match[1]),
-                        monthlyPayment: parseFloat(match[2].replace(/\./g, '').replace(',', '.')),
-                        totalValue: 0,
-                        interestRate: 0,
-                        description: text.substring(0, 100)
-                    };
-                }
-                return null;
-            }).filter(o => o !== null && o.installments > 0) as SimulationOffer[];
+            result.offers = offersData.map((o: any) => ({
+                bankId: 'itau',
+                installments: o.installments,
+                monthlyPayment: o.monthlyPayment,
+                totalValue: o.installments * o.monthlyPayment,
+                interestRate: o.interestRate,
+                description: o.description,
+                hasHighChance: o.hasHighChance
+            })) as SimulationOffer[];
 
             if (result.offers.length > 0) {
                 result.status = 'SUCCESS';

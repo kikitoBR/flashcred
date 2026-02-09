@@ -1,7 +1,20 @@
 import { chromium } from 'playwright';
 import { Client, Vehicle, SimulationResult } from '../types';
 import { ItauAdapter } from './adapters/itau';
+import { BvAdapter } from './adapters/bv';
 import { Credential, SimulationInput } from './types';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Cookie storage paths
+const COOKIES_DIR = path.join(__dirname, '../../cookies');
+const BV_COOKIES_FILE = path.join(COOKIES_DIR, 'bv_session.json');
+const ITAU_COOKIES_FILE = path.join(COOKIES_DIR, 'itau_session.json');
+
+// Ensure cookies directory exists
+if (!fs.existsSync(COOKIES_DIR)) {
+    fs.mkdirSync(COOKIES_DIR, { recursive: true });
+}
 
 
 export const runSimulations = async (client: any, vehicle: any, banks: string[]) => {
@@ -16,10 +29,53 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[])
 
     try {
         for (const bank of banks) {
-            if (bank === 'itau' || bank === 'c6' || bank === '3' || bank === '6') { // Generic check, currently only Itau implemented
+            if (bank === 'itau' || bank === 'c6' || bank === '3' || bank === '6' || bank === 'bv' || bank === '8') { // RPA Banks: Itau, C6, BV
                 console.log(`[Orchestrator] Running simulation for ${bank}...`);
-                const context = await browser.newContext({ viewport: null });
-                const page = await context.newPage();
+
+                let context;
+                let page;
+                let usePersistentContext = false;
+
+                // For BV, use persistent context to avoid bot detection
+                if (bank === 'bv' || bank === '8') {
+                    const BV_PROFILE_DIR = path.join(COOKIES_DIR, 'bv_chrome_profile');
+
+                    if (!fs.existsSync(BV_PROFILE_DIR)) {
+                        fs.mkdirSync(BV_PROFILE_DIR, { recursive: true });
+                    }
+
+                    console.log('[Orchestrator] Using persistent Chrome profile for BV...');
+
+                    // Close existing browser if any (we'll use persistent context instead)
+                    await browser.close();
+
+                    context = await chromium.launchPersistentContext(BV_PROFILE_DIR, {
+                        headless: false,
+                        channel: 'chrome',
+                        args: [
+                            '--start-maximized',
+                            '--disable-blink-features=AutomationControlled',
+                            '--disable-infobars',
+                        ],
+                        viewport: null,
+                        locale: 'pt-BR',
+                        timezoneId: 'America/Sao_Paulo',
+                    });
+
+                    page = context.pages()[0] || await context.newPage();
+                    usePersistentContext = true;
+                } else {
+                    // For other banks, use normal context
+                    const contextOptions: any = {
+                        viewport: null,
+                        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        locale: 'pt-BR',
+                        timezoneId: 'America/Sao_Paulo',
+                    };
+
+                    context = await browser.newContext(contextOptions);
+                    page = await context.newPage();
+                }
 
                 // TODO: Retrieve credentials from a secure storage based on tenant
                 const credentials: Credential = {
@@ -30,13 +86,27 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[])
                 };
 
                 let adapter;
+                let bankCredentials: Credential = credentials;
+
                 if (bank === 'itau' || bank === '3') {
                     adapter = new ItauAdapter();
+                } else if (bank === 'bv' || bank === '8') {
+                    adapter = new BvAdapter();
+                    bankCredentials = {
+                        login: process.env.BV_LOGIN || '',
+                        password: process.env.BV_PASSWORD || ''
+                    };
                 } else {
                     console.warn(`[Orchestrator] No adapter found for ${bank}, skipping RPA for this bank.`);
                     continue;
                 }
-                const loggedIn = await adapter.login(page, credentials);
+
+                const loggedIn = await adapter.login(page, bankCredentials);
+
+                // Log success
+                if (loggedIn) {
+                    console.log(`[Orchestrator] Login successful for ${bank}`);
+                }
 
                 if (loggedIn) {
                     const input: SimulationInput = {
@@ -63,12 +133,14 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[])
                         results.push({
                             bankId: bank,
                             status: 'APPROVED', // Assuming success means approved for now
-                            interestRate: 2.5, // Mock data until scraper is real
-                            maxInstallments: 48,
-                            downPayment: vehicle.price * 0.3,
+                            interestRate: simulationResult.offers.find(o => o.interestRate > 0)?.interestRate || 0,
+                            maxInstallments: 60,
+                            downPayment: input.downPayment,
                             installments: simulationResult.offers.map(o => ({
                                 months: o.installments,
-                                value: o.monthlyPayment
+                                value: o.monthlyPayment,
+                                interestRate: o.interestRate,
+                                hasHighChance: o.hasHighChance
                             })),
                             reason: simulationResult.message
                         });

@@ -64,6 +64,8 @@ export interface SimulationOffer {
   installments: {
     months: number;
     value: number;
+    interestRate?: number;
+    hasHighChance?: boolean;
   }[];
   reason?: string;
 }
