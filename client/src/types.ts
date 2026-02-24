@@ -40,6 +40,15 @@ export interface Vehicle {
     mileage?: number;
     images: string[];
     status?: string;
+    uf?: string;
+    condition?: 'NOVO' | 'SEMINOVO' | 'USADO';
+}
+
+export interface Bank {
+    id: string;
+    name: string;
+    color: string;
+    logoInitial: string;
 }
 
 export interface Sale {

@@ -37,7 +37,7 @@ app.get('/', (req, res) => {
 
 app.post('/api/simulate', async (req, res) => {
     try {
-        const { client, vehicle, banks } = req.body;
+        const { client, vehicle, banks, options } = req.body;
 
         // Log the context
         console.log(`[Tenant: ${req.tenant?.id || 'Unknown'}] Processing simulation request`);
@@ -47,7 +47,7 @@ app.post('/api/simulate', async (req, res) => {
         }
 
         const selectedBanks = banks || ['c6'];
-        const results = await runSimulations(client, vehicle, selectedBanks);
+        const results = await runSimulations(client, vehicle, selectedBanks, options);
 
         res.json(results);
 

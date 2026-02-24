@@ -3,6 +3,7 @@ import { Client, Vehicle, SimulationResult } from '../types';
 import { ItauAdapter } from './adapters/itau';
 import { OmniAdapter } from './adapters/omni';
 import { SafraAdapter } from './adapters/safra';
+import { PanAdapter } from './adapters/pan';
 import { Credential, SimulationInput, BankAdapter } from './types';
 import { credentialService } from './credential-service';
 import * as fs from 'fs';
@@ -20,12 +21,14 @@ if (!fs.existsSync(COOKIES_DIR)) {
 const BANK_ID_MAP: Record<string, string> = {
     '1': 'itau',
     '4': 'bv',
+    '5': 'pan',
     '6': 'c6',
     '7': 'safra',
     '9': 'omni',
     'itau': 'itau',
     'omni': 'omni',
     'safra': 'safra',
+    'pan': 'pan',
 };
 
 // RPA-supported bank IDs
@@ -37,11 +40,12 @@ function createAdapter(bankId: string): BankAdapter | null {
         case 'itau': return new ItauAdapter();
         case 'omni': return new OmniAdapter();
         case 'safra': return new SafraAdapter();
+        case 'pan': return new PanAdapter();
         default: return null;
     }
 }
 
-export const runSimulations = async (client: any, vehicle: any, banks: string[]) => {
+export const runSimulations = async (client: any, vehicle: any, banks: string[], options?: any) => {
     console.log(`[Orchestrator] Starting PARALLEL simulations for banks: ${banks.join(', ')}`);
 
     // Separate RPA banks from mock banks
@@ -62,6 +66,8 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[])
             cpf: client.cpf,
             name: client.name,
             birthDate: client.birthDate || '01/01/1980',
+            phone: client.phone,
+            email: client.email,
         },
         vehicle: {
             plate: vehicle.plate,
@@ -69,9 +75,11 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[])
             model: vehicle.model,
             year: vehicle.year,
             price: vehicle.price,
-            uf: 'SP'
+            uf: vehicle.uf || 'SP',
+            condition: vehicle.condition || 'SEMINOVO'
         },
-        downPayment: vehicle.downPayment || vehicle.entryValue || 0
+        downPayment: vehicle.downPayment || vehicle.entryValue || 0,
+        options: options
     };
 
     // Launch ONE browser, then run all RPA banks in PARALLEL contexts

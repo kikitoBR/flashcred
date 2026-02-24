@@ -23,10 +23,14 @@ export interface SimulationInput {
         year: number;
         price: number;
         uf: string;
+        condition?: 'NOVO' | 'SEMINOVO' | 'USADO';
     };
     paymentMethod?: 'FINANCING' | 'CASH';
     downPayment?: number;
     installments?: number;
+    options?: {
+        safraCoefficient?: string;
+    };
 }
 
 export interface SimulationOffer {

@@ -39,6 +39,8 @@ export interface Vehicle {
   mileage: number;
   images: string[]; // Changed from image: string to images: string[]
   status: 'AVAILABLE' | 'SOLD' | 'RESERVED';
+  uf?: string;
+  condition?: 'NOVO' | 'SEMINOVO' | 'USADO';
 }
 
 export interface Bank {

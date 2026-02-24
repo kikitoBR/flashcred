@@ -13,7 +13,9 @@ router.get('/', async (req, res: any) => {
 
         const parsedVehicles = (vehicles as any[]).map(v => ({
             ...v,
-            images: JSON.parse(v.images_json || '[]')
+            images: JSON.parse(v.images_json || '[]'),
+            uf: v.uf,
+            condition: v.vehicle_condition
         }));
 
         res.json(parsedVehicles);
@@ -27,15 +29,15 @@ router.get('/', async (req, res: any) => {
 router.post('/', async (req, res: any) => {
     try {
         const tenantId = req.tenant.id;
-        const { brand, model, year, price, plate, mileage, images } = req.body;
+        const { brand, model, year, price, plate, mileage, images, uf, condition } = req.body;
 
         const id = uuidv4();
         const imagesJson = JSON.stringify(images || []);
 
         await query(
-            `INSERT INTO vehicles (id, tenant_id, brand, model, year, price, plate, mileage, images_json, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'AVAILABLE')`,
-            [id, tenantId, brand, model, year, price, plate, mileage, imagesJson]
+            `INSERT INTO vehicles (id, tenant_id, brand, model, year, price, plate, mileage, images_json, status, uf, vehicle_condition)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'AVAILABLE', ?, ?)`,
+            [id, tenantId, brand, model, year, price, plate, mileage, imagesJson, uf || null, condition || 'SEMINOVO']
         );
 
         res.status(201).json({ id, message: 'Vehicle created successfully' });
@@ -50,15 +52,15 @@ router.put('/:id', async (req, res: any) => {
     try {
         const tenantId = req.tenant.id;
         const { id } = req.params;
-        const { brand, model, year, price, plate, mileage, images, status } = req.body;
+        const { brand, model, year, price, plate, mileage, images, status, uf, condition } = req.body;
 
         const imagesJson = JSON.stringify(images || []);
 
         const result: any = await query(
             `UPDATE vehicles 
-             SET brand = ?, model = ?, year = ?, price = ?, plate = ?, mileage = ?, images_json = ?, status = ?
+             SET brand = ?, model = ?, year = ?, price = ?, plate = ?, mileage = ?, images_json = ?, status = ?, uf = ?, vehicle_condition = ?
              WHERE id = ? AND tenant_id = ?`,
-            [brand, model, year, price, plate, mileage, imagesJson, status || 'AVAILABLE', id, tenantId]
+            [brand, model, year, price, plate, mileage, imagesJson, status || 'AVAILABLE', uf || null, condition || 'SEMINOVO', id, tenantId]
         );
 
         if (result.affectedRows === 0) {

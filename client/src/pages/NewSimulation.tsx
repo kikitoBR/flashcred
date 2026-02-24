@@ -5,7 +5,7 @@ import {
     CheckSquare, Square, PlayCircle, Zap, Loader2, TrendingUp, AlertCircle, CheckCircle2, PartyPopper, ChevronDown, Unplug, Info
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { Client, SimulationOffer, Vehicle } from '../types';
+import { Client, SimulationOffer, Vehicle, Bank } from '../types';
 import { rpaService } from '../services/api';
 import { BANKS } from '../../constants';
 import { Badge, Button, Card, Input, Modal } from '../components/ui';
@@ -43,12 +43,17 @@ export const NewSimulation = () => {
     // Financials
     const [downPayment, setDownPayment] = useState<number>(0);
 
-    const activeBanks = React.useMemo(() => BANKS.filter(bank => {
-        const cred = bankCredentials.find(c => c.bankId === bank.id);
-        return cred?.status === 'ACTIVE' || !cred?.status;
-    }), [bankCredentials]);
-
+    const [activeBanks, setActiveBanks] = useState<Bank[]>([]);
     const [selectedBanks, setSelectedBanks] = useState<string[]>([]);
+    const [safraCoefficient, setSafraCoefficient] = useState<string>('R0');
+
+    useEffect(() => {
+        const filtered = BANKS.filter(bank => {
+            const cred = bankCredentials.find(c => c.bankId === bank.id);
+            return cred?.status === 'ACTIVE' || !cred?.status;
+        });
+        setActiveBanks(filtered);
+    }, [bankCredentials]);
 
     useEffect(() => {
         // Initialize or update selected banks to only include active ones
@@ -186,7 +191,7 @@ export const NewSimulation = () => {
         setStep(3); // Loading state
 
         // Split banks
-        const rpaBankIds = ['6', '1', '4', '7', '9']; // C6 Bank(6), Itau(1), BV(4), Safra(7), Omni(9)
+        const rpaBankIds = ['6', '1', '4', '5', '7', '9']; // C6 Bank(6), Itau(1), BV(4), Pan(5), Safra(7), Omni(9)
         const selectedRpaBanks = selectedBanks.filter(id => rpaBankIds.includes(id));
         const selectedMockBanks = selectedBanks.filter(id => !rpaBankIds.includes(id));
 
@@ -198,7 +203,8 @@ export const NewSimulation = () => {
                 const rpaResults = await rpaService.simulate({
                     client,
                     vehicle: { ...vehicle, downPayment },
-                    banks: selectedRpaBanks
+                    banks: selectedRpaBanks,
+                    options: { safraCoefficient }
                 });
                 // Map RPA results to SimulationOffer schema
                 if (rpaResults && rpaResults.offers) {
@@ -609,6 +615,28 @@ export const NewSimulation = () => {
                                     {bank.logoInitial}
                                 </div>
                                 <span className="font-medium text-slate-900 text-sm text-center">{bank.name}</span>
+
+                                {bank.id === '7' && selectedBanks.includes('7') && (
+                                    <div className="animate-fade-in mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+                                        <select
+                                            className="w-full text-xs p-1.5 border border-emerald-200 rounded text-emerald-800 bg-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                                            value={safraCoefficient}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                setSafraCoefficient(e.target.value);
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <option value="R0">R0</option>
+                                            <option value="R1">R1</option>
+                                            <option value="R2">R2</option>
+                                            <option value="R3">R3</option>
+                                            <option value="R4">R4</option>
+                                            <option value="R5">R5</option>
+                                        </select>
+                                    </div>
+                                )}
+
                                 <div className="absolute top-3 right-3">
                                     {selectedBanks.includes(bank.id)
                                         ? <CheckSquare className="text-emerald-500 w-5 h-5" />

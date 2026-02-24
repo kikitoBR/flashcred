@@ -86,7 +86,7 @@ export const vehicleService = {
 };
 
 export const rpaService = {
-    simulate: async (data: { client: any; vehicle: any; banks: string[] }) => {
+    simulate: async (data: { client: any; vehicle: any; banks: string[]; options?: any }) => {
         try {
             const response = await fetch(`${API_URL}/simulate`, {
                 method: 'POST',

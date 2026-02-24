@@ -26,7 +26,8 @@ export const Vehicles = () => {
     // Form Initial State
     const initialFormState = {
         brand: '', model: '', year: '', price: '' as string | number, plate: '', mileage: '',
-        images: [] as string[], status: 'AVAILABLE' as 'AVAILABLE' | 'SOLD' | 'RESERVED'
+        images: [] as string[], status: 'AVAILABLE' as 'AVAILABLE' | 'SOLD' | 'RESERVED',
+        uf: '', condition: 'SEMINOVO' as 'NOVO' | 'SEMINOVO' | 'USADO'
     };
     const [formData, setFormData] = useState(initialFormState);
 
@@ -60,9 +61,11 @@ export const Vehicles = () => {
             year: vehicle.year.toString(),
             price: vehicle.price,
             plate: vehicle.plate,
-            mileage: vehicle.mileage.toString(),
+            mileage: vehicle.mileage?.toString() || '',
             images: vehicle.images,
-            status: vehicle.status
+            status: vehicle.status || 'AVAILABLE',
+            uf: vehicle.uf || '',
+            condition: vehicle.condition || 'SEMINOVO'
         });
         setIsModalOpen(true);
     };
@@ -112,7 +115,9 @@ export const Vehicles = () => {
             plate: formData.plate,
             mileage: Number(formData.mileage),
             images: formData.images,
-            status: formData.status
+            status: formData.status,
+            uf: formData.uf,
+            condition: formData.condition
         };
 
         try {
@@ -249,10 +254,12 @@ export const Vehicles = () => {
                             </div>
                             <div className="p-4">
                                 <h3 className="font-bold text-slate-900 text-lg truncate">{vehicle.brand} {vehicle.model}</h3>
-                                <div className="flex items-center gap-2 text-xs text-slate-500 mt-1 mb-3">
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1 mb-3">
                                     <span className="bg-slate-100 px-2 py-0.5 rounded">{vehicle.year}</span>
                                     <span>•</span>
-                                    <span>{vehicle.mileage.toLocaleString()} km</span>
+                                    <span>{vehicle.mileage?.toLocaleString() || 0} km</span>
+                                    <span>•</span>
+                                    <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-medium">{vehicle.condition === 'NOVO' ? '0km' : vehicle.condition === 'USADO' ? 'Usado' : 'Seminovo'}</span>
                                 </div>
 
                                 <div className="flex items-end justify-between mb-4">
@@ -315,6 +322,57 @@ export const Vehicles = () => {
                             }}
                             required
                         />
+
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">UF Licenciamento</label>
+                            <select
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                value={formData.uf}
+                                onChange={(e) => setFormData({ ...formData, uf: e.target.value })}
+                            >
+                                <option value="">Selecione a UF...</option>
+                                <option value="AC">Acre</option>
+                                <option value="AL">Alagoas</option>
+                                <option value="AP">Amapá</option>
+                                <option value="AM">Amazonas</option>
+                                <option value="BA">Bahia</option>
+                                <option value="CE">Ceará</option>
+                                <option value="DF">Distrito Federal</option>
+                                <option value="ES">Espírito Santo</option>
+                                <option value="GO">Goiás</option>
+                                <option value="MA">Maranhão</option>
+                                <option value="MT">Mato Grosso</option>
+                                <option value="MS">Mato Grosso do Sul</option>
+                                <option value="MG">Minas Gerais</option>
+                                <option value="PA">Pará</option>
+                                <option value="PB">Paraíba</option>
+                                <option value="PR">Paraná</option>
+                                <option value="PE">Pernambuco</option>
+                                <option value="PI">Piauí</option>
+                                <option value="RJ">Rio de Janeiro</option>
+                                <option value="RN">Rio Grande do Norte</option>
+                                <option value="RS">Rio Grande do Sul</option>
+                                <option value="RO">Rondônia</option>
+                                <option value="RR">Roraima</option>
+                                <option value="SC">Santa Catarina</option>
+                                <option value="SP">São Paulo</option>
+                                <option value="SE">Sergipe</option>
+                                <option value="TO">Tocantins</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Condição</label>
+                            <select
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                value={formData.condition}
+                                onChange={(e) => setFormData({ ...formData, condition: e.target.value as any })}
+                            >
+                                <option value="NOVO">Novo (0km)</option>
+                                <option value="SEMINOVO">Seminovo</option>
+                                <option value="USADO">Usado</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div className="col-span-1 md:col-span-2">
