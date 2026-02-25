@@ -68,6 +68,7 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
             birthDate: client.birthDate || '01/01/1980',
             phone: client.phone,
             email: client.email,
+            zipCode: client.address?.zipCode || client.zipCode || client.cep, // Map ZIP code from DB/Frontend
         },
         vehicle: {
             plate: vehicle.plate,

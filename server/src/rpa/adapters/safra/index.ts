@@ -178,7 +178,8 @@ export class SafraAdapter implements BankAdapter {
             await cepField.waitFor({ state: 'visible', timeout: 10000 });
             await cepField.click();
             await cepField.fill('');
-            await page.keyboard.type('20040020', { delay: 50 }); // CEP padrão
+            const cepClean = (input.client.zipCode || '20040020').replace(/\D/g, ''); // Usa o CEP do cliente ou um padrão
+            await page.keyboard.type(cepClean, { delay: 50 });
             await page.keyboard.press('Tab');
             await page.waitForTimeout(1000);
 
@@ -297,8 +298,8 @@ export class SafraAdapter implements BankAdapter {
                     console.log(`[SafraAdapter] → SFR ${sfrCoefficient} selected via DOM button`);
                 } else {
                     console.log('[SafraAdapter] ⚠️ Could not find SFR button, trying ng-select...');
-                    // ng-select approach
-                    const ngSelect = page.locator('ng-select[formcontrolname="tipoCoeficiente"], #tipoCoeficiente').first();
+                    // ng-select approach based on HTML <ng-select id="sfr">
+                    const ngSelect = page.locator('ng-select#sfr, ng-select[formcontrolname="tipoCoeficiente"]').first();
                     await ngSelect.waitFor({ state: 'attached', timeout: 5000 });
                     await ngSelect.locator('.ng-select-container').click({ force: true });
                     await page.waitForTimeout(500);

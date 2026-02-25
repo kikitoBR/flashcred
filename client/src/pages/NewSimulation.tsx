@@ -10,22 +10,36 @@ import { rpaService } from '../services/api';
 import { BANKS } from '../../constants';
 import { Badge, Button, Card, Input, Modal } from '../components/ui';
 
+// Helper hook for syncing states to global context
+const useGlobalState = <T,>(key: string, initialValue: T, globalState: any, setGlobalState: any): [T, (valOrFunc: any) => void] => {
+    const stateValue = globalState && globalState[key] !== undefined ? globalState[key] : initialValue;
+    const setter = (valOrFunc: any) => {
+        setGlobalState((prev: any) => {
+            const current = (prev || {});
+            const oldVal = current[key] !== undefined ? current[key] : initialValue;
+            const newVal = typeof valOrFunc === 'function' ? valOrFunc(oldVal) : valOrFunc;
+            return { ...current, [key]: newVal };
+        });
+    };
+    return [stateValue, setter];
+};
+
 export const NewSimulation = () => {
-    const { clients, vehicles, updateClientScore, setVehicles, bankCredentials } = useAppContext();
+    const { clients, vehicles, updateClientScore, setVehicles, bankCredentials, simulationState, setSimulationState } = useAppContext();
     const navigate = useNavigate();
     const location = useLocation();
 
     // Steps: 1-Selection, 2-Banks, 3-Loading, 4-Results
-    const [step, setStep] = useState(1);
+    const [step, setStep] = useGlobalState('step', 1, simulationState, setSimulationState);
 
     // Selection State
-    const [simulationType, setSimulationType] = useState<'registered' | 'guest'>('registered');
-    const [selectedClient, setSelectedClient] = useState<string>('');
+    const [simulationType, setSimulationType] = useGlobalState<'registered' | 'guest'>('simulationType', 'registered', simulationState, setSimulationState);
+    const [selectedClient, setSelectedClient] = useGlobalState<string>('selectedClient', '', simulationState, setSimulationState);
     const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
-    const [clientSearchTerm, setClientSearchTerm] = useState('');
+    const [clientSearchTerm, setClientSearchTerm] = useGlobalState('clientSearchTerm', '', simulationState, setSimulationState);
 
     // Guest State
-    const [guestData, setGuestData] = useState({
+    const [guestData, setGuestData] = useGlobalState('guestData', {
         name: '',
         cpf: '',
         phone: '',
@@ -33,19 +47,19 @@ export const NewSimulation = () => {
         hasCnh: false,
         categories: [] as string[],
         score: '500'
-    });
+    }, simulationState, setSimulationState);
 
     // Vehicle Selection
-    const [selectedVehicle, setSelectedVehicle] = useState<string>('');
-    const [vehicleSearchTerm, setVehicleSearchTerm] = useState('');
+    const [selectedVehicle, setSelectedVehicle] = useGlobalState<string>('selectedVehicle', '', simulationState, setSimulationState);
+    const [vehicleSearchTerm, setVehicleSearchTerm] = useGlobalState('vehicleSearchTerm', '', simulationState, setSimulationState);
     const [isVehicleDropdownOpen, setIsVehicleDropdownOpen] = useState(false);
 
     // Financials
-    const [downPayment, setDownPayment] = useState<number>(0);
+    const [downPayment, setDownPayment] = useGlobalState<number>('downPayment', 0, simulationState, setSimulationState);
 
     const [activeBanks, setActiveBanks] = useState<Bank[]>([]);
-    const [selectedBanks, setSelectedBanks] = useState<string[]>([]);
-    const [safraCoefficient, setSafraCoefficient] = useState<string>('R0');
+    const [selectedBanks, setSelectedBanks] = useGlobalState<string[]>('selectedBanks', [], simulationState, setSimulationState);
+    const [safraCoefficient, setSafraCoefficient] = useGlobalState<string>('safraCoefficient', 'R0', simulationState, setSimulationState);
 
     useEffect(() => {
         const filtered = BANKS.filter(bank => {
@@ -62,7 +76,7 @@ export const NewSimulation = () => {
             return prev.filter(id => activeBanks.some(b => b.id === id));
         });
     }, [activeBanks]);
-    const [simulationResults, setSimulationResults] = useState<SimulationOffer[]>([]);
+    const [simulationResults, setSimulationResults] = useGlobalState<SimulationOffer[]>('simulationResults', [], simulationState, setSimulationState);
 
     // Sale Success State
     const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -289,7 +303,19 @@ export const NewSimulation = () => {
     const getBestOffer = () => {
         const approved = simulationResults.filter(r => r.status === 'APPROVED');
         if (approved.length === 0) return null;
-        return approved.reduce((prev, curr) => prev.interestRate < curr.interestRate ? prev : curr);
+
+        // Função auxiliar para encontrar o valor da menor parcela dentro de uma oferta
+        const getLowestInstallment = (offer: SimulationOffer) => {
+            if (!offer.installments || offer.installments.length === 0) return Infinity;
+            return Math.min(...offer.installments.map(i => i.value));
+        };
+
+        // Compara qual banco tem a parcela com o menor valor absoluto
+        return approved.reduce((prev, curr) => {
+            const minPrev = getLowestInstallment(prev);
+            const minCurr = getLowestInstallment(curr);
+            return minCurr < minPrev ? curr : prev;
+        });
     };
 
     const bestOffer = getBestOffer();

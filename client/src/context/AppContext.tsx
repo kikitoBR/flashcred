@@ -12,6 +12,8 @@ export interface AppContextType {
     updateBankCredential: (data: BankCredential) => void;
     updateClientScore: (clientId: string, newScore: number) => void;
     refreshData: () => Promise<void>;
+    simulationState: any;
+    setSimulationState: React.Dispatch<React.SetStateAction<any>>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -54,13 +56,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setClients(prev => prev.map(c => c.id === clientId ? { ...c, score: newScore } : c));
     };
 
+    const [simulationState, setSimulationState] = useState<any>(null);
+
     return (
         <AppContext.Provider value={{
             clients, setClients,
             vehicles, setVehicles,
             bankCredentials, updateBankCredential,
             updateClientScore,
-            refreshData
+            refreshData,
+            simulationState, setSimulationState
         }}>
             {children}
         </AppContext.Provider>

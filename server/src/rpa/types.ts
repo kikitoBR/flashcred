@@ -15,6 +15,7 @@ export interface SimulationInput {
         birthDate: string;
         phone?: string;
         email?: string;
+        zipCode?: string; // NOVO CAMPO
     };
     vehicle: {
         plate: string;
