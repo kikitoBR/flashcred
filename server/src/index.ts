@@ -20,6 +20,7 @@ import vehicleRoutes from './routes/vehicles';
 import salesRoutes from './routes/sales';
 import interactionRoutes from './routes/interactions';
 import credentialsRoutes from './routes/credentials';
+import fipeRoutes from './routes/fipe';
 
 // Apply tenant middleware to API routes
 app.use('/api', tenantMiddleware);
@@ -30,6 +31,7 @@ app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/interactions', interactionRoutes);
 app.use('/api/credentials', credentialsRoutes);
+app.use('/api/fipe', fipeRoutes);
 
 app.get('/', (req, res) => {
     res.send('FlashCred Server Running (Multi-Tenant)');
