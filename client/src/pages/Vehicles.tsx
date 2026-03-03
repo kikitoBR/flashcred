@@ -456,9 +456,6 @@ export const Vehicles = () => {
                         <Input label="Marca Final" value={formData.brand} onChange={(e: any) => setFormData({ ...formData, brand: e.target.value })} required placeholder="Ex: Honda" />
                         <Input label="Modelo Final" value={formData.model} onChange={(e: any) => setFormData({ ...formData, model: e.target.value })} required placeholder="Ex: Civic" />
 
-                        <div className="md:col-span-2">
-                            <Input label="Versão FIPE (Para Robô RPA Selecionar)" value={formData.version} onChange={(e: any) => setFormData({ ...formData, version: e.target.value })} placeholder="Ex: CIVIC SEDAN TOURING 1.5 TURBO 16V AUT. 4P" />
-                        </div>
 
                         <Input label="Ano (Fabricação)" type="number" value={formData.year} onChange={(e: any) => setFormData({ ...formData, year: e.target.value })} required />
 

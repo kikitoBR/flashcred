@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     History, Search, ArrowUpDown, ArrowUp, ArrowDown, Zap, PhoneCall, RefreshCw,
-    User, Phone, Mail, Car, PlayCircle, Printer, TrendingUp, FileText, MessageCircle
+    User, Phone, Mail, Car, PlayCircle, Printer, TrendingUp, FileText, MessageCircle, Eye
 } from 'lucide-react';
 import {
     ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip,
@@ -12,6 +12,7 @@ import {
 import { Button, Card, Badge, Input, Modal } from '../components/ui';
 import { salesService, interactionsService } from '../services/api';
 import { getWhatsAppLink, generateMessage } from '../utils/whatsapp';
+import { BANKS } from '../../constants';
 
 export const Statistics = () => {
     const navigate = useNavigate();
@@ -21,6 +22,10 @@ export const Statistics = () => {
     // Modal for Client Details
     const [isOppModalOpen, setIsOppModalOpen] = useState(false);
     const [selectedOppClient, setSelectedOppClient] = useState<any>(null);
+
+    // Modal for Simulation Details
+    const [isSimModalOpen, setIsSimModalOpen] = useState(false);
+    const [selectedSimulation, setSelectedSimulation] = useState<any>(null);
 
     // State for History Table
     const [historySearch, setHistorySearch] = useState('');
@@ -63,15 +68,21 @@ export const Statistics = () => {
 
             // Map and format simulation history
             if (Array.isArray(simulations)) {
-                setSimulationHistory(simulations.map((s: any) => ({
-                    id: s.id,
-                    client: s.client_name,
-                    vehicle: s.vehicle_description,
-                    date: s.created_at?.split('T')[0] || '',
-                    status: s.status,
-                    bank: s.bank_name,
-                    rate: 0 // Placeholder, or extract from result_data
-                })));
+                setSimulationHistory(simulations.map((s: any) => {
+                    let parsedResult = s.result_data;
+                    if (typeof parsedResult === 'string') {
+                        try { parsedResult = JSON.parse(parsedResult); } catch (e) { parsedResult = {}; }
+                    }
+                    return {
+                        id: s.id,
+                        client: s.client_name,
+                        vehicle: s.vehicle_description,
+                        date: s.created_at?.split('T')[0] || '',
+                        status: s.status,
+                        bank: s.bank_name,
+                        resultData: parsedResult
+                    };
+                }));
             }
 
             if (opportunities) {
@@ -296,7 +307,7 @@ export const Statistics = () => {
                 {/* Simulation History with Filters */}
                 <div className="space-y-4">
                     <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                        <History className="text-slate-600" size={24} /> Histórico Geral
+                        <History className="text-slate-600" size={24} /> Histórico de Simulações
                     </h2>
 
                     <div className="flex flex-col md:flex-row gap-4 mb-2">
@@ -359,6 +370,9 @@ export const Statistics = () => {
                                         >
                                             Banco <SortIcon columnKey="bank" />
                                         </th>
+                                        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">
+                                            Ações
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -375,6 +389,14 @@ export const Statistics = () => {
                                                 </Badge>
                                             </td>
                                             <td className="px-6 py-4 text-slate-600">{item.bank}</td>
+                                            <td className="px-6 py-4">
+                                                <Button variant="ghost" className="h-8 w-8 p-0 border border-slate-200" onClick={() => {
+                                                    setSelectedSimulation(item);
+                                                    setIsSimModalOpen(true);
+                                                }}>
+                                                    <Eye className="w-4 h-4 text-slate-500" />
+                                                </Button>
+                                            </td>
                                         </tr>
                                     ))}
                                     {filteredHistory.length === 0 && !loading && (
@@ -662,6 +684,58 @@ export const Statistics = () => {
                     </table>
                 </div>
             </div>
+
+            {/* Simulation Details Modal */}
+            <Modal isOpen={isSimModalOpen} onClose={() => setIsSimModalOpen(false)} title="Detalhes da Simulação">
+                {selectedSimulation?.resultData?.offers && selectedSimulation.resultData.offers.length > 0 ? (
+                    <div className="space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2 break-inside-avoid">
+                        {selectedSimulation.resultData.offers.map((offer: any, idx: number) => {
+                            const bank = BANKS.find((b: any) => b.id === offer.bankId);
+                            return (
+                                <div key={idx} className={`p-4 rounded-xl border border-slate-200 border-l-4 ${offer.status === 'APPROVED' ? 'border-l-emerald-500 bg-emerald-50/10' : 'border-l-red-500 bg-red-50/10'}`}>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs ${bank?.color || 'bg-slate-400'}`}>
+                                                {bank?.logoInitial || '?'}
+                                            </div>
+                                            <h4 className="font-bold text-slate-900">{bank?.name || offer.bankName || offer.bankId}</h4>
+                                        </div>
+                                        <Badge variant={offer.status === 'APPROVED' ? 'success' : 'danger'}>{offer.status === 'APPROVED' ? 'Pré-Aprovado' : 'Proposta Recusada'}</Badge>
+                                    </div>
+                                    {offer.status === 'APPROVED' && offer.installments && (
+                                        <div className="grid grid-cols-2 gap-2 mt-3">
+                                            {offer.installments.map((inst: any, i: number) => (
+                                                <div key={i} className="bg-white p-2 rounded border border-slate-100 flex justify-between items-center shadow-sm">
+                                                    <span className="font-bold text-slate-700">{inst.months}x</span>
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-emerald-600 font-bold text-sm">R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                        {inst.interestRate ? <span className="text-[10px] text-slate-400">{inst.interestRate.toFixed(2)}% a.m.</span> : null}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {offer.status !== 'APPROVED' && offer.reason && (
+                                        <div className="mt-2 bg-red-50 p-2 rounded text-red-700 text-xs flex items-center gap-1 border border-red-100">
+                                            <span>Motivo: {offer.reason}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <div className="p-8 flex flex-col items-center justify-center text-center">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                            <History className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 mb-2">Sem detalhes no Histórico</h3>
+                        <p className="text-sm text-slate-500 max-w-xs">
+                            Os resultados desta simulação não foram armazenados no banco de dados, ou falharam durante o cálculo.
+                        </p>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 };

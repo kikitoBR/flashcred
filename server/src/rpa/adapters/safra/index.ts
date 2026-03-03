@@ -1,5 +1,6 @@
 import { Page } from 'playwright';
 import { BankAdapter, Credential, SimulationInput, SimulationResult, SimulationOffer } from '../../types';
+import { StringUtils } from '../../utils/stringUtils';
 
 export class SafraAdapter implements BankAdapter {
     id = 'safra';
@@ -228,7 +229,7 @@ export class SafraAdapter implements BankAdapter {
             console.log('[SafraAdapter] → Waiting for version options to load...');
             await page.waitForTimeout(5000);
 
-            // ── Step 8: Select Version (first available) ──
+            // ── Step 8: Select Version (Intelligent Match) ──
             console.log('[SafraAdapter] Step 8: Selecting vehicle version...');
             try {
                 const versaoSelect = page.locator('ng-select#versao');
@@ -236,10 +237,35 @@ export class SafraAdapter implements BankAdapter {
                 // Click to open the dropdown
                 await versaoSelect.locator('.ng-select-container').click();
                 await page.waitForTimeout(1500);
-                // Select first option
-                const firstOption = page.locator('ng-select#versao .ng-option').first();
-                await firstOption.waitFor({ state: 'visible', timeout: 10000 });
-                await firstOption.click();
+
+                // Fetch all options
+                const optionsElements = page.locator('ng-select#versao .ng-option');
+                const optionsCount = await optionsElements.count();
+
+                if (optionsCount > 0) {
+                    const optionTexts: string[] = [];
+                    for (let i = 0; i < optionsCount; i++) {
+                        const text = await optionsElements.nth(i).textContent();
+                        if (text) optionTexts.push(text.trim());
+                    }
+
+                    const targetText = input.vehicle.model;
+                    const bestMatch = StringUtils.findBestMatch(targetText, optionTexts);
+
+                    if (bestMatch) {
+                        console.log(`[SafraAdapter] → Target: "${targetText}" | Best Match: "${bestMatch}"`);
+                        const optionToClick = page.locator(`ng-select#versao .ng-option:has-text("${bestMatch}")`).first();
+                        await optionToClick.waitFor({ state: 'visible', timeout: 10000 });
+                        await optionToClick.click();
+                    } else {
+                        // Fallback
+                        console.log('[SafraAdapter] → No good match found, falling back to first option');
+                        await optionsElements.first().click();
+                    }
+                } else {
+                    console.warn('[SafraAdapter] ⚠️ No version options loaded in dropdown');
+                }
+
                 console.log('[SafraAdapter] → Version selected');
                 await page.waitForTimeout(1000);
             } catch (e: any) {
@@ -280,7 +306,7 @@ export class SafraAdapter implements BankAdapter {
             await page.waitForTimeout(10000);
 
             // ── Step 12: Select SFR Coefficient ──
-            const sfrCoefficient = (input as any).options?.safraCoefficient || 'R0';
+            const sfrCoefficient = (input as any).options?.safraCoefficient || 'R5';
             console.log(`[SafraAdapter] Step 12: Selecting SFR coefficient: ${sfrCoefficient}...`);
             try {
                 // Tenta selecionar via botão nativamente se existir

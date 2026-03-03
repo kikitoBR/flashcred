@@ -21,6 +21,7 @@ export interface SimulationInput {
         plate: string;
         brand: string;
         model: string;
+        version?: string; // NOVO: usado para encontrar a versão exata nos bancos
         year: number;
         price: number;
         uf: string;

@@ -37,6 +37,15 @@ export const salesService = {
         const response = await fetch(`${API_URL}/sales/opportunities`, { headers: getHeaders() });
         if (!response.ok) throw new Error('Failed to fetch opportunities');
         return response.json();
+    },
+    logSimulation: async (data: any) => {
+        const response = await fetch(`${API_URL}/sales/simulation`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) throw new Error('Failed to log simulation');
+        return response.json();
     }
 };
 

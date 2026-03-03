@@ -34,6 +34,7 @@ export interface Vehicle {
     id: string;
     brand: string;
     model: string;
+    version?: string;
     year: number;
     price: number;
     plate: string;

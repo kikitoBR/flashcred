@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Client, SimulationOffer, Vehicle, Bank } from '../types';
-import { rpaService } from '../services/api';
+import { rpaService, salesService } from '../services/api';
 import { BANKS } from '../../constants';
 import { Badge, Button, Card, Input, Modal } from '../components/ui';
 
@@ -59,7 +59,7 @@ export const NewSimulation = () => {
 
     const [activeBanks, setActiveBanks] = useState<Bank[]>([]);
     const [selectedBanks, setSelectedBanks] = useGlobalState<string[]>('selectedBanks', [], simulationState, setSimulationState);
-    const [safraCoefficient, setSafraCoefficient] = useGlobalState<string>('safraCoefficient', 'R0', simulationState, setSimulationState);
+    const [safraCoefficient, setSafraCoefficient] = useGlobalState<string>('safraCoefficient', 'R5', simulationState, setSimulationState);
 
     useEffect(() => {
         const filtered = BANKS.filter(bank => {
@@ -286,6 +286,21 @@ export const NewSimulation = () => {
                 const newScore = Math.round((approvedCount / totalSimulated) * 1000);
                 updateClientScore(client.id, newScore);
             }
+        }
+
+        // Save simulation to history
+        try {
+            await salesService.logSimulation({
+                clientId: simulationType === 'registered' ? client.id : undefined,
+                clientName: client.name,
+                clientCpf: client.cpf,
+                vehicleId: vehicle.id,
+                vehicleDescription: `${vehicle.brand} ${vehicle.model} ${vehicle.version || ''}`.trim(),
+                status: results.some(r => r.status === 'APPROVED') ? 'APPROVED' : 'REJECTED',
+                resultData: { offers: results }
+            });
+        } catch (error) {
+            console.error("Failed to log simulation", error);
         }
 
         setStep(4); // Show Results
