@@ -13,7 +13,8 @@ export const pool = mysql.createPool({
     connectionLimit: 10,
     queueLimit: 0,
     enableKeepAlive: true,
-    keepAliveInitialDelay: 0
+    keepAliveInitialDelay: 0,
+    timezone: 'Z'
 });
 
 export async function query(sql: string, params: any[] = []) {

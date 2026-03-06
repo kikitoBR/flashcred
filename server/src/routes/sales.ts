@@ -40,22 +40,30 @@ router.get('/opportunities', async (req, res: any) => {
     try {
         const tenantId = req.tenant.id;
 
-        // Remarketing: Approved simulations from > 3 (arbitrary) days ago
+        // Remarketing: Approved simulations from > 5 minutes ago that DO NOT have a finalized sale
         const remarketing = await query(
-            `SELECT id, client_name as name, vehicle_description as car, created_at as date, status, 
-                    client_cpf as cpf, 'N/A' as phone, 0 as income, 'N/A' as email
-             FROM simulations 
-             WHERE tenant_id = ? AND status = 'APPROVED' AND created_at < DATE_SUB(NOW(), INTERVAL 3 DAY)
+            `SELECT s.id, s.client_name as name, s.vehicle_description as car, s.created_at as date, s.status, 
+                    s.client_cpf as cpf, 'N/A' as phone, 0 as income, 'N/A' as email
+             FROM simulations s
+             WHERE s.tenant_id = ? 
+               AND s.status = 'APPROVED' 
+               AND s.created_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+               AND NOT EXISTS (
+                   SELECT 1 FROM sales sa 
+                   WHERE sa.tenant_id = s.tenant_id 
+                     AND sa.client_cpf = s.client_cpf 
+                     AND sa.status = 'FINALIZED'
+               )
              LIMIT 50`,
             [tenantId]
         );
 
-        // Retry: Rejected simulations from > 7 days ago
+        // Retry: Rejected simulations from > 10 minutes ago (adjusted for testing)
         const retry = await query(
             `SELECT id, client_name as name, vehicle_description as car, created_at as date, 
                     client_cpf as cpf, 'N/A' as phone, 0 as income, 'N/A' as email
              FROM simulations 
-             WHERE tenant_id = ? AND status LIKE 'REJECT%' AND created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)
+             WHERE tenant_id = ? AND status LIKE 'REJECT%' AND created_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)
              LIMIT 50`,
             [tenantId]
         );

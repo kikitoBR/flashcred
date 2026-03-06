@@ -77,9 +77,17 @@ export const Statistics = () => {
                         id: s.id,
                         client: s.client_name,
                         vehicle: s.vehicle_description,
-                        date: s.created_at?.split('T')[0] || '',
+                        date: s.created_at || '',
                         status: s.status,
-                        bank: s.bank_name,
+                        bank: (() => {
+                            const b = s.bank_name || '';
+                            if (b.includes(',')) {
+                                const banks = b.split(',').map((x: string) => x.trim()).filter(Boolean);
+                                if (banks.length > 2) return 'Múltiplos Bancos';
+                                return banks.join(', ');
+                            }
+                            return b;
+                        })(),
                         resultData: parsedResult
                     };
                 }));
@@ -228,7 +236,11 @@ export const Statistics = () => {
     const formatDate = (dateString: string) => {
         if (!dateString) return '-';
         const date = new Date(dateString);
-        return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        let res = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        if (dateString.includes('T') && !dateString.endsWith('T00:00:00.000Z')) {
+            res += ' ' + date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        }
+        return res;
     };
 
     // --- PDF REPORT DATA GENERATION ---

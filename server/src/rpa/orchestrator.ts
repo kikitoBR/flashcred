@@ -4,6 +4,7 @@ import { ItauAdapter } from './adapters/itau';
 import { OmniAdapter } from './adapters/omni';
 import { SafraAdapter } from './adapters/safra';
 import { PanAdapter } from './adapters/pan';
+import { C6Adapter } from './adapters/c6';
 import { Credential, SimulationInput, BankAdapter } from './types';
 import { credentialService } from './credential-service';
 import * as fs from 'fs';
@@ -41,6 +42,7 @@ function createAdapter(bankId: string): BankAdapter | null {
         case 'omni': return new OmniAdapter();
         case 'safra': return new SafraAdapter();
         case 'pan': return new PanAdapter();
+        case 'c6': return new C6Adapter();
         default: return null;
     }
 }
@@ -121,6 +123,7 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     locale: 'pt-BR',
                     timezoneId: 'America/Sao_Paulo',
+                    permissions: ['geolocation'],
                 });
                 const page = await context.newPage();
 

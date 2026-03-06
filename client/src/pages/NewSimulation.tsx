@@ -56,6 +56,7 @@ export const NewSimulation = () => {
 
     // Financials
     const [downPayment, setDownPayment] = useGlobalState<number>('downPayment', 0, simulationState, setSimulationState);
+    const [dealerReturn, setDealerReturn] = useGlobalState<string>('dealerReturn', 'R0', simulationState, setSimulationState);
 
     const [activeBanks, setActiveBanks] = useState<Bank[]>([]);
     const [selectedBanks, setSelectedBanks] = useGlobalState<string[]>('selectedBanks', [], simulationState, setSimulationState);
@@ -218,7 +219,10 @@ export const NewSimulation = () => {
                     client,
                     vehicle: { ...vehicle, downPayment },
                     banks: selectedRpaBanks,
-                    options: { safraCoefficient }
+                    options: {
+                        safraCoefficient,
+                        dealerReturn: dealerReturn || 0
+                    }
                 });
                 // Map RPA results to SimulationOffer schema
                 if (rpaResults && rpaResults.offers) {
@@ -658,6 +662,28 @@ export const NewSimulation = () => {
                                     {bank.logoInitial}
                                 </div>
                                 <span className="font-medium text-slate-900 text-sm text-center">{bank.name}</span>
+
+                                {bank.id === '6' && selectedBanks.includes('6') && (
+                                    <div className="animate-fade-in mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+                                        <select
+                                            className="w-full text-xs p-1.5 border border-emerald-200 rounded text-emerald-800 bg-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                                            value={dealerReturn}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                setDealerReturn(e.target.value);
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <option value="R0">R0 (0%)</option>
+                                            <option value="R1">R1 (1%)</option>
+                                            <option value="R2">R2 (2%)</option>
+                                            <option value="R3">R3 (3%)</option>
+                                            <option value="R4">R4 (4%)</option>
+                                            <option value="R5">R5 (5%)</option>
+                                            <option value="R6">R6 (6%)</option>
+                                        </select>
+                                    </div>
+                                )}
 
                                 {bank.id === '7' && selectedBanks.includes('7') && (
                                     <div className="animate-fade-in mt-1 w-full" onClick={(e) => e.stopPropagation()}>
