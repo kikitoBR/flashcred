@@ -218,6 +218,88 @@ export class ItauAdapter implements BankAdapter {
                 }
             }
 
+            // ── HANDLE LOJISTA RETURN (RE) ──
+            try {
+                const itauReturnVal = String((input as any).options?.itauReturn || '0');
+                console.log(`[ItauAdapter] Configuring Return setting to: ${itauReturnVal}`);
+
+                // 1. Click the gear icon to open modal
+                const gearBtn = page.locator('button[data-cy="open-return-modal"], button[aria-label="Alterar R"]').first();
+                if (await gearBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                    await gearBtn.click();
+                    await page.waitForTimeout(2000); // wait for modal animation
+
+                    // 2. Click the select dropdown (Strict locator to avoid background elements like "Ocupação")
+                    const selectCombo = page.locator('ids-select[formcontrolname="returnValue"] [role="combobox"], label:has-text("Valor do retorno") >> xpath=..//div[@role="combobox"]').first();
+                    if (await selectCombo.isVisible()) {
+                        await selectCombo.click({ force: true });
+                        await page.waitForTimeout(1000); // wait for options overlay
+
+                        // 3. Pick the option corresponding to the Return value (0 to 5, etc)
+                        // This is an Angular component <ids-select>. It opens a cdk-overlay container.
+                        console.log('[ItauAdapter] Focusing dropdown and using keyboard navigation...');
+                        
+                        try {
+                            // Ensure focus on the combobox
+                            await selectCombo.focus();
+                            // Press Home to jump to the first option (R0)
+                            await page.keyboard.press('Home');
+                            await page.waitForTimeout(300);
+                            
+                            // Press ArrowDown the exact amount of times to reach the desired return (e.g. 4 times for R4)
+                            const targetIndex = parseInt(itauReturnVal);
+                            for (let i = 0; i < targetIndex; i++) {
+                                await page.keyboard.press('ArrowDown');
+                                await page.waitForTimeout(150);
+                            }
+                            
+                            // Press Enter to confirm selection
+                            await page.keyboard.press('Enter');
+                            await page.waitForTimeout(500);
+                            
+                            // Verify if the value visually updated, if not, try JS injection
+                            const currentText = await selectCombo.innerText();
+                            if (!currentText.includes(itauReturnVal)) {
+                                console.log('[ItauAdapter] Keyboard nav seemed to fail. Attempting JS Injection fallback.');
+                                await page.evaluate((val) => {
+                                    const selectEl = document.querySelector('ids-select[formcontrolname="returnValue"]');
+                                    if (selectEl) {
+                                        // Attempt to manually trigger Angular bindings
+                                        (selectEl as any).value = val;
+                                        selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                                        selectEl.dispatchEvent(new Event('input', { bubbles: true }));
+                                        selectEl.dispatchEvent(new Event('ngModelChange', { bubbles: true }));
+                                    }
+                                }, itauReturnVal);
+                                await page.waitForTimeout(1000);
+                            }
+                        } catch (err) {
+                            console.log('[ItauAdapter] Error during selection:', err);
+                        }
+
+                        // 4. Submit
+                        const applyBtn = page.locator('button[data-cy="apply-return-button"], button:has-text("Alterar retorno")').first();
+                        await applyBtn.click({ force: true });
+                        console.log('[ItauAdapter] Return updated. Waiting 8s for recalculation...');
+                        
+                        await page.waitForTimeout(8000); 
+
+                        // Also look for any 'Recalcular' button just in case changing the value triggers the need to click it
+                        const recalcBtnAgain = await page.locator('button:has-text("Recalcular"), button:has-text("Atualizar")').first();
+                        if (await recalcBtnAgain.isVisible({ timeout: 2000 }).catch(() => false)) {
+                            await recalcBtnAgain.click();
+                            await page.waitForTimeout(5000);
+                        }
+                    } else {
+                        console.log('[ItauAdapter] ⚠️ Return dropdown not found inside modal.');
+                    }
+                } else {
+                    console.log('[ItauAdapter] ℹ️ Gear icon "Alterar R" not found on screen. Skipping config.');
+                }
+            } catch (e: any) {
+                console.error('[ItauAdapter] ⚠️ Error configuring Lojista Return:', e.message);
+            }
+
             // SCRAPE OFFERS
             console.log('[ItauAdapter] Scraping offers (v3 - Broad)...');
 

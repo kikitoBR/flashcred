@@ -61,6 +61,9 @@ export const NewSimulation = () => {
     const [activeBanks, setActiveBanks] = useState<Bank[]>([]);
     const [selectedBanks, setSelectedBanks] = useGlobalState<string[]>('selectedBanks', [], simulationState, setSimulationState);
     const [safraCoefficient, setSafraCoefficient] = useGlobalState<string>('safraCoefficient', 'R5', simulationState, setSimulationState);
+    const [bradescoReturn, setBradescoReturn] = useGlobalState<string>('bradescoReturn', '0', simulationState, setSimulationState);
+    const [omniReturn, setOmniReturn] = useGlobalState<string>('omniReturn', '0', simulationState, setSimulationState);
+    const [itauReturn, setItauReturn] = useGlobalState<string>('itauReturn', '0', simulationState, setSimulationState);
 
     useEffect(() => {
         const filtered = BANKS.filter(bank => {
@@ -206,7 +209,7 @@ export const NewSimulation = () => {
         setStep(3); // Loading state
 
         // Split banks
-        const rpaBankIds = ['6', '1', '4', '5', '7', '9']; // C6 Bank(6), Itau(1), BV(4), Pan(5), Safra(7), Omni(9)
+        const rpaBankIds = ['6', '1', '2', '4', '5', '7', '9']; // C6 Bank(6), Itau(1), Bradesco(2), BV(4), Pan(5), Safra(7), Omni(9)
         const selectedRpaBanks = selectedBanks.filter(id => rpaBankIds.includes(id));
         const selectedMockBanks = selectedBanks.filter(id => !rpaBankIds.includes(id));
 
@@ -221,7 +224,10 @@ export const NewSimulation = () => {
                     banks: selectedRpaBanks,
                     options: {
                         safraCoefficient,
-                        dealerReturn: dealerReturn || 0
+                        dealerReturn: dealerReturn || 0,
+                        bradescoReturn,
+                        omniReturn,
+                        itauReturn
                     }
                 });
                 // Map RPA results to SimulationOffer schema
@@ -702,6 +708,69 @@ export const NewSimulation = () => {
                                             <option value="R3">R3</option>
                                             <option value="R4">R4</option>
                                             <option value="R5">R5</option>
+                                        </select>
+                                    </div>
+                                )}
+
+                                {bank.id === '2' && selectedBanks.includes('2') && (
+                                    <div className="animate-fade-in mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+                                        <select
+                                            className="w-full text-xs p-1.5 border border-emerald-200 rounded text-emerald-800 bg-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                                            value={bradescoReturn}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                setBradescoReturn(e.target.value);
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <option value="0">R0 (0%)</option>
+                                            <option value="1">R1 (1%)</option>
+                                            <option value="2">R2 (2%)</option>
+                                            <option value="3">R3 (3%)</option>
+                                            <option value="4">R4 (4%)</option>
+                                            <option value="5">R5 (5%)</option>
+                                            <option value="6">R6 (6%)</option>
+                                        </select>
+                                    </div>
+                                )}
+
+                                {bank.id === '9' && selectedBanks.includes('9') && (
+                                    <div className="animate-fade-in mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+                                        <select
+                                            className="w-full text-xs p-1.5 border border-emerald-200 rounded text-emerald-800 bg-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                                            value={omniReturn}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                setOmniReturn(e.target.value);
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <option value="0">R0 (0%)</option>
+                                            <option value="1">R1 (1%)</option>
+                                            <option value="2">R2 (2%)</option>
+                                            <option value="3">R3 (3%)</option>
+                                            <option value="4">R4 (4%)</option>
+                                            <option value="5">R5 (5%)</option>
+                                        </select>
+                                    </div>
+                                )}
+
+                                {bank.id === '1' && selectedBanks.includes('1') && (
+                                    <div className="animate-fade-in mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+                                        <select
+                                            className="w-full text-xs p-1.5 border border-emerald-200 rounded text-emerald-800 bg-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                                            value={itauReturn}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                setItauReturn(e.target.value);
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <option value="0">R0 (0%)</option>
+                                            <option value="1">R1 (1%)</option>
+                                            <option value="2">R2 (2%)</option>
+                                            <option value="3">R3 (3%)</option>
+                                            <option value="4">R4 (4%)</option>
                                         </select>
                                     </div>
                                 )}

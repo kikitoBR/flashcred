@@ -134,6 +134,66 @@ export class OmniAdapter implements BankAdapter {
                 console.log(`[OmniAdapter] Page: ${bodyText.substring(0, 500)}`);
             }
 
+            // ── STEP 9.5: Configure Lojista Return ──
+            console.log('[OmniAdapter] Step 9.5: Configuring Lojista Return (RE)...');
+            try {
+                // Click gear icon
+                const gearBtn = page.locator('a.icon-full .fa-gear, a.icon-full:has(.fa-gear)').first();
+                if (await gearBtn.isVisible({ timeout: 5000 })) {
+                    await gearBtn.click({ force: true });
+                    await page.waitForTimeout(1500); // Wait for modal animation
+
+                    const omniReturnVal = parseInt((input as any).options?.omniReturn || '0');
+                    console.log(`[OmniAdapter] Setting Return value to: ${omniReturnVal}`);
+
+                    if (omniReturnVal >= 0 && omniReturnVal <= 5) {
+                        // The Omni slider uses a custom bootstrap-like slider component
+                        const sliderHandle = page.locator('slider-retorno .slider-handle[role="slider"], #slider-retorno ~ .slider .slider-handle').first();
+                        
+                        console.log('[OmniAdapter] Custom slider handle found. Attempting keyboard navigation.');
+                        if (await sliderHandle.isVisible({ timeout: 5000 }).catch(() => false)) {
+                            // Focus the handle to enable keyboard control (it has tabindex="0")
+                            await sliderHandle.click({ force: true });
+                            await sliderHandle.focus();
+                            await page.waitForTimeout(200);
+                            
+                            // Reset to 0
+                            await page.keyboard.press('Home');
+                            await page.waitForTimeout(500);
+                            
+                            // Increment with exactly the requested value
+                            for (let i = 0; i < omniReturnVal; i++) {
+                                await page.keyboard.press('ArrowRight');
+                                await page.waitForTimeout(300);
+                            }
+                        } else {
+                            console.log('[OmniAdapter] fallback: injecting JS to set custom slider value directly.');
+                            // Fallback js injection: update the hidden configuration input
+                            await page.evaluate((val) => {
+                                const hiddenInput = document.querySelector('#slider-retorno') as HTMLInputElement;
+                                if (hiddenInput) {
+                                    hiddenInput.value = val.toString();
+                                    hiddenInput.setAttribute('value', val.toString());
+                                    hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+                                    hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                }
+                            }, omniReturnVal);
+                        }
+                    }
+
+                    // Click Salvar (targeting the visible one inside the modal)
+                    const salvarBtn = page.locator('button.btn-full-orange:has-text("Salvar"):visible').first();
+                    await salvarBtn.click();
+                    
+                    console.log('[OmniAdapter] Aguardando 10 segundos para o recálculo...');
+                    await page.waitForTimeout(10000); // Increased from 5s to 10s based on user request
+                } else {
+                    console.log('[OmniAdapter] ℹ️ Gear icon not found, skipping RE configuration.');
+                }
+            } catch (e: any) {
+                console.warn('[OmniAdapter] ⚠️ Failed to configure Return slider. Error:', e.message);
+            }
+
             // ── STEP 10: Scrape offers ──
             console.log('[OmniAdapter] 📊 Scraping offers...');
 

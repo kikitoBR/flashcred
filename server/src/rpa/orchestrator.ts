@@ -5,6 +5,7 @@ import { OmniAdapter } from './adapters/omni';
 import { SafraAdapter } from './adapters/safra';
 import { PanAdapter } from './adapters/pan';
 import { C6Adapter } from './adapters/c6';
+import { BradescoAdapter } from './adapters/bradesco';
 import { Credential, SimulationInput, BankAdapter } from './types';
 import { credentialService } from './credential-service';
 import * as fs from 'fs';
@@ -21,12 +22,14 @@ if (!fs.existsSync(COOKIES_DIR)) {
 // Bank ID mapping (numeric IDs from frontend → internal adapter IDs)
 const BANK_ID_MAP: Record<string, string> = {
     '1': 'itau',
+    '2': 'bradesco',
     '4': 'bv',
     '5': 'pan',
     '6': 'c6',
     '7': 'safra',
     '9': 'omni',
     'itau': 'itau',
+    'bradesco': 'bradesco',
     'omni': 'omni',
     'safra': 'safra',
     'pan': 'pan',
@@ -43,6 +46,7 @@ function createAdapter(bankId: string): BankAdapter | null {
         case 'safra': return new SafraAdapter();
         case 'pan': return new PanAdapter();
         case 'c6': return new C6Adapter();
+        case 'bradesco': return new BradescoAdapter();
         default: return null;
     }
 }
