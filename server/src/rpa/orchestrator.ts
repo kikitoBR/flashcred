@@ -156,7 +156,8 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                                 months: o.installments,
                                 value: o.monthlyPayment,
                                 interestRate: o.interestRate,
-                                hasHighChance: o.hasHighChance
+                                hasHighChance: o.hasHighChance,
+                                description: o.description
                             })),
                             reason: simulationResult.message
                         };

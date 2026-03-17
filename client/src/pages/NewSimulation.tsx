@@ -56,14 +56,15 @@ export const NewSimulation = () => {
 
     // Financials
     const [downPayment, setDownPayment] = useGlobalState<number>('downPayment', 0, simulationState, setSimulationState);
-    const [dealerReturn, setDealerReturn] = useGlobalState<string>('dealerReturn', 'R0', simulationState, setSimulationState);
+    const [dealerReturn, setDealerReturn] = useGlobalState<string>('dealerReturn', 'R6', simulationState, setSimulationState);
 
     const [activeBanks, setActiveBanks] = useState<Bank[]>([]);
     const [selectedBanks, setSelectedBanks] = useGlobalState<string[]>('selectedBanks', [], simulationState, setSimulationState);
     const [safraCoefficient, setSafraCoefficient] = useGlobalState<string>('safraCoefficient', 'R5', simulationState, setSimulationState);
-    const [bradescoReturn, setBradescoReturn] = useGlobalState<string>('bradescoReturn', '0', simulationState, setSimulationState);
-    const [omniReturn, setOmniReturn] = useGlobalState<string>('omniReturn', '0', simulationState, setSimulationState);
-    const [itauReturn, setItauReturn] = useGlobalState<string>('itauReturn', '0', simulationState, setSimulationState);
+    const [bradescoReturn, setBradescoReturn] = useGlobalState<string>('bradescoReturn', '6', simulationState, setSimulationState);
+    const [omniReturn, setOmniReturn] = useGlobalState<string>('omniReturn', '5', simulationState, setSimulationState);
+    const [itauReturn, setItauReturn] = useGlobalState<string>('itauReturn', '4', simulationState, setSimulationState);
+    const [panReturn, setPanReturn] = useGlobalState<string>('panReturn', '4', simulationState, setSimulationState);
 
     useEffect(() => {
         const filtered = BANKS.filter(bank => {
@@ -227,7 +228,8 @@ export const NewSimulation = () => {
                         dealerReturn: dealerReturn || 0,
                         bradescoReturn,
                         omniReturn,
-                        itauReturn
+                        itauReturn,
+                        panReturn
                     }
                 });
                 // Map RPA results to SimulationOffer schema
@@ -680,13 +682,13 @@ export const NewSimulation = () => {
                                             }}
                                             onClick={(e) => e.stopPropagation()}
                                         >
-                                            <option value="R0">R0 (0%)</option>
-                                            <option value="R1">R1 (1%)</option>
-                                            <option value="R2">R2 (2%)</option>
-                                            <option value="R3">R3 (3%)</option>
-                                            <option value="R4">R4 (4%)</option>
-                                            <option value="R5">R5 (5%)</option>
-                                            <option value="R6">R6 (6%)</option>
+                                            <option value="R0">R0</option>
+                                            <option value="R1">R1</option>
+                                            <option value="R2">R2</option>
+                                            <option value="R3">R3</option>
+                                            <option value="R4">R4</option>
+                                            <option value="R5">R5</option>
+                                            <option value="R6">R6</option>
                                         </select>
                                     </div>
                                 )}
@@ -723,13 +725,13 @@ export const NewSimulation = () => {
                                             }}
                                             onClick={(e) => e.stopPropagation()}
                                         >
-                                            <option value="0">R0 (0%)</option>
-                                            <option value="1">R1 (1%)</option>
-                                            <option value="2">R2 (2%)</option>
-                                            <option value="3">R3 (3%)</option>
-                                            <option value="4">R4 (4%)</option>
-                                            <option value="5">R5 (5%)</option>
-                                            <option value="6">R6 (6%)</option>
+                                            <option value="0">R0</option>
+                                            <option value="1">R1</option>
+                                            <option value="2">R2</option>
+                                            <option value="3">R3</option>
+                                            <option value="4">R4</option>
+                                            <option value="5">R5</option>
+                                            <option value="6">R6</option>
                                         </select>
                                     </div>
                                 )}
@@ -745,12 +747,12 @@ export const NewSimulation = () => {
                                             }}
                                             onClick={(e) => e.stopPropagation()}
                                         >
-                                            <option value="0">R0 (0%)</option>
-                                            <option value="1">R1 (1%)</option>
-                                            <option value="2">R2 (2%)</option>
-                                            <option value="3">R3 (3%)</option>
-                                            <option value="4">R4 (4%)</option>
-                                            <option value="5">R5 (5%)</option>
+                                            <option value="0">R0</option>
+                                            <option value="1">R1</option>
+                                            <option value="2">R2</option>
+                                            <option value="3">R3</option>
+                                            <option value="4">R4</option>
+                                            <option value="5">R5</option>
                                         </select>
                                     </div>
                                 )}
@@ -766,11 +768,31 @@ export const NewSimulation = () => {
                                             }}
                                             onClick={(e) => e.stopPropagation()}
                                         >
-                                            <option value="0">R0 (0%)</option>
-                                            <option value="1">R1 (1%)</option>
-                                            <option value="2">R2 (2%)</option>
-                                            <option value="3">R3 (3%)</option>
-                                            <option value="4">R4 (4%)</option>
+                                            <option value="0">R0</option>
+                                            <option value="1">R1</option>
+                                            <option value="2">R2</option>
+                                            <option value="3">R3</option>
+                                            <option value="4">R4</option>
+                                        </select>
+                                    </div>
+                                )}
+
+                                {bank.id === '5' && selectedBanks.includes('5') && (
+                                    <div className="animate-fade-in mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+                                        <select
+                                            className="w-full text-xs p-1.5 border border-emerald-200 rounded text-emerald-800 bg-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                                            value={panReturn}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                setPanReturn(e.target.value);
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <option value="0">R0</option>
+                                            <option value="1">R1</option>
+                                            <option value="2">R2</option>
+                                            <option value="3">R3</option>
+                                            <option value="4">R4</option>
                                         </select>
                                     </div>
                                 )}
@@ -864,40 +886,63 @@ export const NewSimulation = () => {
                                             </div>
 
                                             {offer.status === 'APPROVED' ? (
-                                                <div className="col-span-2 md:col-span-4 mt-4">
-                                                    <p className="text-xs font-bold text-slate-500 uppercase mb-3">Opções de Parcelamento</p>
-                                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                                        {offer.installments.sort((a, b) => b.months - a.months).map((inst) => (
-                                                            <div
-                                                                key={inst.months}
-                                                                onClick={() => handleFinalizeSale(offer)}
-                                                                className={`p-3 rounded-lg border cursor-pointer hover:border-emerald-500 transition-all relative overflow-hidden group ${inst.hasHighChance ? 'bg-emerald-50/50 border-emerald-200 ring-1 ring-emerald-100' : 'bg-white border-slate-100'}`}
-                                                            >
-                                                                {inst.hasHighChance && (
-                                                                    <div className="absolute top-0 right-0 bg-emerald-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg z-10">
-                                                                        Alta Chance
+                                                    <div className="col-span-2 md:col-span-4 mt-4">
+                                                        <p className="text-xs font-bold text-slate-500 uppercase mb-3">Opções de Parcelamento</p>
+                                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                            {offer.installments
+                                                                .filter((inst, index, self) => index === self.findIndex(t => t.months === inst.months && t.value === inst.value && t.description === inst.description))
+                                                                .sort((a, b) => b.months - a.months)
+                                                                .map((inst) => {
+                                                                const isUnavailable = inst.description?.includes('Indisponível');
+                                                                return (
+                                                                    <div
+                                                                        key={inst.months}
+                                                                        onClick={() => !isUnavailable && handleFinalizeSale(offer)}
+                                                                        className={`p-3 rounded-lg border transition-all relative overflow-hidden group ${
+                                                                            isUnavailable
+                                                                                ? 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
+                                                                                : inst.hasHighChance 
+                                                                                    ? 'bg-emerald-50/50 border-emerald-200 ring-1 ring-emerald-100 cursor-pointer hover:border-emerald-500' 
+                                                                                    : 'bg-white border-slate-100 cursor-pointer hover:border-emerald-500'
+                                                                        }`}
+                                                                    >
+                                                                        {inst.hasHighChance && !isUnavailable && (
+                                                                            <div className="absolute top-0 right-0 bg-emerald-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg z-10">
+                                                                                Alta Chance
+                                                                            </div>
+                                                                        )}
+                                                                         {isUnavailable && (
+                                                                            <div className="absolute top-0 right-0 bg-slate-400 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg z-10">
+                                                                                Indisponível
+                                                                            </div>
+                                                                        )}
+                                                                        <div className="flex flex-col gap-1">
+                                                                            <div className="flex items-baseline gap-1">
+                                                                                <span className="text-lg font-bold text-slate-900">{inst.months}x</span>
+                                                                                {!isUnavailable && (
+                                                                                    <span className="text-sm font-bold text-emerald-600">R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                                                )}
+                                                                            </div>
+                                                                            {isUnavailable ? (
+                                                                                <p className="text-[10px] text-amber-600 font-medium leading-tight mt-1">{inst.description}</p>
+                                                                            ) : inst.interestRate ? (
+                                                                                <p className="text-[10px] text-slate-400 font-medium">{inst.interestRate.toFixed(2)}% a.m.</p>
+                                                                            ) : (
+                                                                                <p className="text-[10px] text-slate-300">-</p>
+                                                                            )}
+                                                                        </div>
+                                                                        {!isUnavailable && (
+                                                                            <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-2 right-2">
+                                                                                <div className="bg-emerald-500 text-white p-1 rounded-full shadow-sm">
+                                                                                    <CheckCircle2 size={12} />
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
-                                                                )}
-                                                                <div className="flex flex-col gap-1">
-                                                                    <div className="flex items-baseline gap-1">
-                                                                        <span className="text-lg font-bold text-slate-900">{inst.months}x</span>
-                                                                        <span className="text-sm font-bold text-emerald-600">R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                                                    </div>
-                                                                    {inst.interestRate ? (
-                                                                        <p className="text-[10px] text-slate-400 font-medium">{inst.interestRate.toFixed(2)}% a.m.</p>
-                                                                    ) : (
-                                                                        <p className="text-[10px] text-slate-300">-</p>
-                                                                    )}
-                                                                </div>
-                                                                <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-2 right-2">
-                                                                    <div className="bg-emerald-500 text-white p-1 rounded-full shadow-sm">
-                                                                        <CheckCircle2 size={12} />
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        ))}
+                                                                );
+                                                            })}
+                                                        </div>
                                                     </div>
-                                                </div>
                                             ) : (
                                                 <div className="bg-red-50 p-3 rounded-lg text-red-700 text-sm flex items-center gap-2">
                                                     <AlertCircle size={16} /> Motivo: {offer.reason}

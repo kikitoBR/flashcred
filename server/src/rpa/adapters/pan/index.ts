@@ -79,7 +79,10 @@ export class PanAdapter implements BankAdapter {
             await cpfField.click();
             await cpfField.fill('');
             const cpfClean = input.client.cpf.replace(/\D/g, '');
-            await page.keyboard.type(cpfClean, { delay: 50 });
+            for (const char of cpfClean) {
+                await page.keyboard.press(char);
+                await page.waitForTimeout(100);
+            }
             await page.waitForTimeout(1500);
 
             // Step 2: Fill phone
@@ -87,21 +90,26 @@ export class PanAdapter implements BankAdapter {
             const phoneField = page.locator('input[formcontrolname="cellNumber"]');
             await phoneField.waitFor({ state: 'visible', timeout: 10000 });
             await phoneField.click();
-            await page.waitForTimeout(300); // Wait for mask and cursor to be fully ready
+            await page.waitForTimeout(500); // Wait for mask and cursor to be fully ready
             await phoneField.fill('');
             const phone = input.client.phone || '';
             const phoneClean = phone.replace(/\D/g, '');
             if (phoneClean) {
-                // Slower delay so the mask processes the first digits properly
-                await page.keyboard.type(phoneClean, { delay: 200 });
+                // Slower delay so the mask processes the first digits properly. 
+                // We type character by character explicitly to ensure the mask doesn't swallow inputs.
+                for (const char of phoneClean) {
+                    await page.keyboard.press(char);
+                    await page.waitForTimeout(150);
+                }
             }
             await page.waitForTimeout(1000);
 
             // Step 3: Fill plate
             console.log('[PanAdapter] Step 3: Filling plate...');
-            const plateField = page.locator('#combo__input[aria-controls="listbox-plate"]');
-            await plateField.waitFor({ state: 'visible', timeout: 10000 });
-            await plateField.click();
+            const plateField = page.locator('#combo__input[aria-controls="listbox-plate"], input[formcontrolname="licensePlate"]');
+            await plateField.first().waitFor({ state: 'visible', timeout: 15000 });
+            await page.waitForTimeout(1000); // Extra wait for Angular to enable the field
+            await plateField.first().click({ force: true });
             await plateField.fill('');
             await page.keyboard.type(input.vehicle.plate.replace(/[-\s]/g, '').toUpperCase(), { delay: 80 });
             await page.waitForTimeout(2000);
@@ -155,8 +163,51 @@ export class PanAdapter implements BankAdapter {
             const simularBtn = page.locator('mahoe-button[variant="primary"] button, button:has-text("Simular")').first();
             await simularBtn.waitFor({ state: 'visible', timeout: 10000 });
             await simularBtn.click({ force: true });
-            console.log('[PanAdapter] Simular clicked! Waiting for results...');
-            await page.waitForTimeout(60000);
+            console.log('[PanAdapter] Simular clicked! Pausing for 30 seconds as requested...');
+            await page.waitForTimeout(30000);
+            console.log('[PanAdapter] 30 seconds wait finished, waiting for results...');
+            
+            // Step 7.5: Configurar Retorno PAN (R0-R4)
+            try {
+                // Wait for the first card to ensure we're targeting the most recent simulation
+                const firstCard = page.locator('mahoe-card, .card, app-deal-card').first();
+                await firstCard.waitFor({ state: 'visible', timeout: 45000 });
+
+                // Strictly locate the button INSIDE the first card. This prevents falling back to older simulations.
+                const visualizarBtn = firstCard.locator('button.mahoe-button__ghost:has-text("Visualizar proposta"), button:has-text("Visualizar proposta")').first();
+                await visualizarBtn.waitFor({ state: 'visible', timeout: 60000 });
+                console.log('[PanAdapter] Clicando em Visualizar proposta para ajustar Retorno...');
+                await visualizarBtn.click({ force: true });
+                await page.waitForTimeout(2000);
+
+                const panReturn = input.options?.panReturn || '3'; // Default R3
+                const returnVal = panReturn.replace('R', '');
+                
+                console.log(`[PanAdapter] Ajustando Retorno PAN para R${returnVal}...`);
+                const slider = page.locator('input[type="range"][id*="Retorno"]');
+                await slider.waitFor({ state: 'visible', timeout: 10000 });
+                
+                // Set the value using evaluate to trigger events properly
+                await slider.evaluate((node: HTMLInputElement, val) => {
+                    node.value = val;
+                    node.dispatchEvent(new Event('input', { bubbles: true }));
+                    node.dispatchEvent(new Event('change', { bubbles: true }));
+                }, returnVal);
+                await page.waitForTimeout(1000);
+
+                // Click Recalcular
+                console.log('[PanAdapter] Clicando em Recalcular...');
+                const recalcularBtn = page.locator('button.mahoe-button__secondary:has-text("Recalcular")').first();
+                await recalcularBtn.waitFor({ state: 'visible', timeout: 10000 });
+                await recalcularBtn.click({ force: true });
+
+                console.log('[PanAdapter] Aguardando recálculo...');
+                await page.waitForTimeout(8000); // Wait for the network to resolve and animation
+            } catch (e: any) {
+                console.log(`[PanAdapter] Aviso: Não foi possível ajustar o retorno PAN: ${e.message}`);
+                // Fallback wait if the button was not found, to ensure the page is fully loaded
+                await page.waitForTimeout(10000);
+            }
 
             // Step 8: Extract results
             console.log('[PanAdapter] Step 8: Extracting results...');
@@ -176,7 +227,55 @@ export class PanAdapter implements BankAdapter {
                 const results: any[] = [];
 
                 try {
-                    // Find all cards first
+                    // Strategy 0: New UI with app-custom-checkbox / installments-container__radio
+                    const radioCards = Array.from(document.querySelectorAll('.installments-container__radio, app-custom-checkbox, .custom-radio'));
+                    if (radioCards.length > 0) {
+                        radioCards.forEach(card => {
+                            const text = (card as HTMLElement).innerText?.trim();
+                            if (!text) return;
+                            
+                            const instMatch = text.match(/(\d+)\s*parcelas/i) || text.match(/(\d+)\s*[x×]/i);
+                            const valMatch = text.match(/R\$\s*([\d.,]+)/i);
+                            
+                            const isApproved = text.toLowerCase().includes('aprovado');
+                            const isUnavailable = text.toLowerCase().includes('indisponível');
+                            
+                            if (instMatch && valMatch && (isApproved || isUnavailable)) {
+                                const installments = parseInt(instMatch[1]);
+                                const paymentStr = valMatch[1].replace(/\./g, '').replace(',', '.');
+                                const monthlyPayment = parseFloat(paymentStr);
+                                
+                                // Extract required minimum downpayment if unavailable
+                                let requiredEntry = 0;
+                                if (isUnavailable) {
+                                    const entryMatch = text.match(/Entrada\s*m[íi]nima\s*de\s*R\$\s*([\d.,]+)/i);
+                                    if (entryMatch) {
+                                        requiredEntry = parseFloat(entryMatch[1].replace(/\./g, '').replace(',', '.'));
+                                    }
+                                }
+
+                                results.push({
+                                    installments,
+                                    monthlyPayment: isUnavailable ? 0 : monthlyPayment,
+                                    requiredEntry, // We will map this to the frontend description or a new field
+                                    isApproved,
+                                    text: text
+                                });
+                            }
+                        });
+                        if (results.length > 0) {
+                            // The markup has nested spans causing duplicate captures via querySelectorAll
+                            // We deduplicate by 'installments' + 'isApproved' combination
+                            const uniqueResults = results.filter((value, index, self) =>
+                                index === self.findIndex((t) => (
+                                    t.installments === value.installments && t.isApproved === value.isApproved
+                                ))
+                            );
+                            return uniqueResults; // If new strategy worked, return immediately
+                        }
+                    }
+
+                    // Find all cards first (Fallback for older UIs)
                     const cards = Array.from(document.querySelectorAll('mahoe-card, .card'));
 
                     // We only want the first card (the leftmost/most recent one)
@@ -190,7 +289,7 @@ export class PanAdapter implements BankAdapter {
                             const text = (item as HTMLElement).innerText?.trim();
                             if (!text) return;
 
-                            // Parse patterns like "48x de R$ 3.456,78" or "48x R$ 3.456,78"
+                            // Parse patterns like "48x de R$ 3.456,78" ou "48x R$ 3.456,78"
                             const match = text.match(/(\d+)\s*[x×]\s*(?:de\s*)?R\$\s*([\d.,]+)/i);
                             if (match) {
                                 results.push({
@@ -243,7 +342,11 @@ export class PanAdapter implements BankAdapter {
                 monthlyPayment: o.monthlyPayment,
                 totalValue: o.installments * o.monthlyPayment,
                 interestRate: o.interestRate || 0,
-                description: o.text || `${o.installments}x`,
+                // Pass custom description to show required downpayment for unavailable options
+                description: o.isApproved === false && o.requiredEntry > 0 ? `Indisponível - Entrada Mínima: R$ ${o.requiredEntry.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : (o.text || `${o.installments}x`),
+                hasHighChance: o.isApproved !== false, 
+                // We'll mark the specific ones as rejected if they are unavailable 
+                status: o.isApproved === false ? 'REJECTED' : 'APPROVED' // Note: 'status' isn't explicitly in SimulationOffer, but frontend map checks for overall simulation result
             })) as SimulationOffer[];
 
             if (result.offers.length > 0) {
