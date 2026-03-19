@@ -94,7 +94,7 @@ export const Clients = () => {
             cpf: client.cpf,
             email: client.email,
             phone: client.phone,
-            income: client.income.toString(),
+            income: client.income ? client.income.toString() : '',
             score: client.score.toString(),
             address: { ...client.address },
             cnh: client.cnh || { hasCnh: false, categories: [] },
@@ -114,13 +114,12 @@ export const Clients = () => {
         try {
             const clientData = {
                 ...formData,
-                income: Number(formData.income),
+                income: formData.income ? Number(formData.income) : undefined,
                 score: Number(formData.score)
             };
 
             if (editingClient) {
-                // TODO: Update existing client API
-                // await clientsService.update(editingClient.id, clientData);
+                await clientService.update(editingClient.id, clientData);
             } else {
                 await clientService.create(clientData);
             }
@@ -193,16 +192,10 @@ export const Clients = () => {
             </div>
 
             {/* KPI Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-4 text-white shadow-lg shadow-emerald-500/20">
                     <p className="text-emerald-100 text-xs font-medium uppercase tracking-wider">Total Clientes</p>
                     <p className="text-3xl font-bold mt-1">{clients.length}</p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-                    <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Simulações</p>
-                    <p className="text-3xl font-bold text-blue-600 mt-1">
-                        {clients.reduce((acc, c) => acc + (c.simulationCount || 0), 0)}
-                    </p>
                 </div>
                 <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
                     <p className="text-slate-500 text-xs font-medium uppercase tracking-wider">Score 700+</p>
@@ -273,7 +266,7 @@ export const Clients = () => {
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <div className="inline-flex flex-col items-center">
-                                                <span className="text-lg font-bold text-slate-800">R$ {(client.income / 1000).toFixed(1)}K</span>
+                                                <span className="text-lg font-bold text-slate-800">{client.income ? `R$ ${(client.income / 1000).toFixed(1)}K` : 'N/A'}</span>
                                                 <span className="text-xs text-slate-400">mensal</span>
                                             </div>
                                         </td>
@@ -404,7 +397,6 @@ export const Clients = () => {
                             type="number"
                             value={formData.income}
                             onChange={(e: any) => setFormData({ ...formData, income: e.target.value })}
-                            required
                         />
                         <Input
                             label="Score Aprox."

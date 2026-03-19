@@ -82,6 +82,11 @@ router.get('/stats', async (req, res: any) => {
         const today = new Date().toISOString().split('T')[0];
 
         // Basic KPI counts
+        const [totalSims] = await query(
+            `SELECT COUNT(*) as count FROM simulations WHERE tenant_id = ?`,
+            [tenantId]
+        ) as any[];
+
         const [todaySims] = await query(
             `SELECT COUNT(*) as count FROM simulations WHERE tenant_id = ? AND DATE(created_at) = ?`,
             [tenantId, today]
@@ -98,7 +103,7 @@ router.get('/stats', async (req, res: any) => {
         ) as any[];
 
         // Monthly Performance (last 5 months sales)
-        // Note: Using hardcoded months if no data exists could be an option, but let's try real data.
+        // ... rest of the code is unchanged ...
         const monthlyData = await query(
             `SELECT DATE_FORMAT(sale_date, '%b') as name, SUM(financed_value) as value 
              FROM sales 
@@ -170,6 +175,7 @@ router.get('/stats', async (req, res: any) => {
         }));
 
         res.json({
+            totalSimulations: totalSims?.count || 0,
             todaySimulations: todaySims?.count || 0,
             todayApprovals: todayApprovals?.count || 0,
             totalFinanced: totalFinanced?.total || 0,

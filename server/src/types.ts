@@ -3,7 +3,7 @@ export interface Client {
   id: string;
   name: string;
   cpf: string;
-  income: number;
+  income?: number;
   email: string;
   phone: string;
   birthDate?: string; // Data de nascimento (DD/MM/AAAA) - opcional para compatibilidade

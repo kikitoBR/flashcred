@@ -4,7 +4,7 @@ import { BankAdapter, Credential, SimulationInput, SimulationResult, SimulationO
 export class OmniAdapter implements BankAdapter {
     id = 'omni';
     name = 'Omni Financeira';
-    private baseUrl = 'https://omnimaisweb.omni.com.br/login';
+    private baseUrl = 'https://omni-mais.omni.com.br/login';
 
     // =============================
     // LOGIN
@@ -20,32 +20,32 @@ export class OmniAdapter implements BankAdapter {
                 return true;
             }
 
-            const usernameField = page.locator('#user-login');
-            const passwordField = page.locator('#user-password');
+            // Usuário — input com label "Usuário"
+            const usernameField = page.locator('input.omni-input[formcontrolname="username"]');
             await usernameField.waitFor({ state: 'visible', timeout: 15000 });
-            await passwordField.waitFor({ state: 'visible', timeout: 5000 });
-
-            // Fill with keyboard (Angular-friendly)
             await usernameField.click();
             await usernameField.fill('');
-            await page.keyboard.type(credentials.login, { delay: 30 });
+            await page.keyboard.type(credentials.login, { delay: 40 });
 
+            // Senha — input type password com label "Senha de acesso"
+            const passwordField = page.locator('input.omni-input[formcontrolname="password"]');
+            await passwordField.waitFor({ state: 'visible', timeout: 5000 });
             await passwordField.click();
             await passwordField.fill('');
-            await page.keyboard.type(credentials.password || '', { delay: 30 });
+            await page.keyboard.type(credentials.password || '', { delay: 40 });
             await page.waitForTimeout(500);
 
-            // Click Entrar (<a> tag)
-            await page.locator('a.btn-login').click({ force: true });
+            // Botão "Continuar"
+            await this.clickOmniButton(page, 'Continuar');
 
-            // Wait for redirect away from /login
+            // Esperar redirecionamento (sair de /login)
             try {
-                await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 20000 });
+                await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 25000 });
                 console.log(`[OmniAdapter] ✅ Login OK → ${page.url()}`);
                 return true;
             } catch {
                 if (!page.url().includes('/login')) return true;
-                console.error('[OmniAdapter] ❌ Login failed.');
+                console.error('[OmniAdapter] ❌ Login failed — still on /login');
                 return false;
             }
         } catch (error: any) {
@@ -62,183 +62,267 @@ export class OmniAdapter implements BankAdapter {
         const result: SimulationResult = { bankId: this.id, status: 'ERROR', offers: [] };
 
         try {
-            // ── STEP 1: Navigate to /simulador-veiculo ──
-            console.log('[OmniAdapter] → Navigating to simulator...');
-            try {
-                const simNav = page.locator('a[href*="simulador-veiculo"], a:has-text("SIMULADOR")').first();
-                await simNav.waitFor({ state: 'visible', timeout: 5000 });
-                await simNav.click();
-            } catch {
-                await page.goto('https://omnimaisweb.omni.com.br/simulador-veiculo', { waitUntil: 'domcontentloaded' });
-            }
-            await page.waitForTimeout(3000);
+            // ── STEP 1: Clicar "Nova Simulação" ──
+            console.log('[OmniAdapter] Step 1 → Nova Simulação...');
+            const novaSimBtn = page.locator('button:has-text("Nova Simulação"), omni-button:has-text("Nova Simulação")').first();
+            await novaSimBtn.waitFor({ state: 'visible', timeout: 15000 });
+            await novaSimBtn.click();
+            await page.waitForTimeout(2000);
 
-            // ── STEP 2: Pessoa Física ──
-            console.log('[OmniAdapter] → Pessoa Física...');
-            await this.clickSelector(page, 'Pessoa F');
+            // ── STEP 2: Selecionar "Automóveis" ──
+            console.log('[OmniAdapter] Step 2 → Automóveis...');
+            const autoCard = page.locator('app-selectable-product-card:has-text("Automóveis"), button:has-text("Automóveis")').first();
+            await autoCard.waitFor({ state: 'visible', timeout: 10000 });
+            await autoCard.click();
             await page.waitForTimeout(1000);
 
-            // ── STEP 3: Financiamento ──
-            console.log('[OmniAdapter] → Financiamento...');
-            await this.clickSelector(page, 'Financiamento');
+            // ── STEP 3: Clicar "Continuar" no dialog de produto ──
+            console.log('[OmniAdapter] Step 3 → Continuar (produto)...');
+            await this.clickOmniButton(page, 'Continuar');
+            await page.waitForTimeout(2000);
+
+            // ── STEP 4: Inserir CPF do cliente ──
+            console.log(`[OmniAdapter] Step 4 → CPF: ${input.client.cpf}`);
+            const cpfInput = page.locator('input[placeholder*="CPF"], input.app-huge-input__input').first();
+            await cpfInput.waitFor({ state: 'visible', timeout: 10000 });
+            await cpfInput.click();
+            await cpfInput.fill('');
+            const cpfDigits = input.client.cpf.replace(/\D/g, '');
+            await page.keyboard.type(cpfDigits, { delay: 50 });
+            await page.waitForTimeout(1000);
+
+            // Clicar Continuar (CPF)
+            await this.clickOmniButton(page, 'Continuar');
+            await page.waitForTimeout(2000);
+
+            // ── STEP 5: Tratar modal "já possui proposta" ──
+            console.log('[OmniAdapter] Step 5 → Verificando modal de proposta existente...');
+            try {
+                const novaSimModal = page.locator('button:has-text("Iniciar nova simulação"), span:has-text("Iniciar nova simulação")').first();
+                if (await novaSimModal.isVisible({ timeout: 3000 })) {
+                    console.log('[OmniAdapter] ⚠️ Modal de proposta existente detectado → clicando "Iniciar nova simulação"');
+                    await novaSimModal.click();
+                    await page.waitForTimeout(2000);
+                }
+            } catch {
+                console.log('[OmniAdapter] ℹ️ Sem modal de proposta existente — cliente novo.');
+            }
+
+            // ── STEP 6: Espera inteligente — análise de perfil (~20s) ──
+            console.log('[OmniAdapter] Step 6 → ⏳ Aguardando análise de perfil do cliente...');
+            const profileAnalysisOk = await this.smartWait(page, [
+                'input[testid="telephone-input"]',       // telefone = aprovado
+                'input.telephone-page__input',            // telefone alternativo
+                'app-denied-result-page',                 // negado
+            ], 45000);
+
+            // ── STEP 7: Detecção de negado ──
+            if (page.url().includes('negado/resultado') || await page.locator('app-denied-result-page').isVisible({ timeout: 1000 }).catch(() => false)) {
+                console.log('[OmniAdapter] ❌ Cliente NEGADO pelo banco Omni.');
+                result.status = 'ERROR';
+                result.message = 'Perfil de crédito do cliente não atende aos critérios mínimos do Omni';
+                return result;
+            }
+
+            if (!profileAnalysisOk) {
+                console.warn('[OmniAdapter] ⚠️ Timeout na análise de perfil. Verificando estado da página...');
+                // Última tentativa de check
+                if (page.url().includes('negado')) {
+                    result.message = 'Cliente negado pelo Omni';
+                    return result;
+                }
+            }
+
+            // ── STEP 8: Inserir telefone do cliente ──
+            console.log(`[OmniAdapter] Step 8 → Telefone: ${input.client.phone || '11999999999'}`);
+            const phoneInput = page.locator('input[testid="telephone-input"], input.telephone-page__input').first();
+            await phoneInput.waitFor({ state: 'visible', timeout: 10000 });
+            await phoneInput.click();
+            await phoneInput.fill('');
+            const phoneDigits = (input.client.phone || '11999999999').replace(/\D/g, '');
+            await page.keyboard.type(phoneDigits, { delay: 40 });
+            await page.waitForTimeout(500);
+
+            // Continuar (telefone)
+            await this.clickOmniButton(page, 'Continuar');
+            await page.waitForTimeout(2000);
+
+            // ── STEP 9: Inserir Placa e UF de licenciamento ──
+            console.log(`[OmniAdapter] Step 9 → Placa: ${input.vehicle.plate} | UF: ${input.vehicle.uf}`);
+
+            // Placa
+            const plateInput = page.locator('input[testid="vehicle-plate"], input[formcontrolname="plate"]').first();
+            await plateInput.waitFor({ state: 'visible', timeout: 10000 });
+            await plateInput.click();
+            await plateInput.fill('');
+            await page.keyboard.type(input.vehicle.plate.replace(/\s/g, ''), { delay: 50 });
+            await page.waitForTimeout(1000);
+
+            // UF de licenciamento — omni-select customizado (readonly input + overlay)
+            console.log(`[OmniAdapter] → Selecionando UF: ${input.vehicle.uf}`);
+            const ufSelect = page.locator('omni-select[testid="vehicle-licensing-state"], omni-select[formcontrolname="licensingState"]').first();
+            await ufSelect.waitFor({ state: 'visible', timeout: 10000 });
+            await ufSelect.locator('input.omni-input').click({ force: true }); // Abre o overlay
             await page.waitForTimeout(1500);
 
-            // ── STEP 4: Automóveis ──
-            console.log('[OmniAdapter] → Automóveis...');
-            await this.clickSelector(page, 'Autom');
-            await page.waitForTimeout(1500);
+            // A UF no omni é exibida como "RJ (Rio de Janeiro)"
+            // Então vamos digitar no input e clicar na opção correspondente do overlay
+            console.log(`[OmniAdapter] Localizando UF no overlay...`);
+            await page.keyboard.type(input.vehicle.uf, { delay: 100 });
+            await page.waitForTimeout(1500); // Espera o search processar
 
-            // ── STEP 5: Continuar → Vehicle info page ──
-            console.log('[OmniAdapter] → Continuar (to vehicle info)...');
-            await this.clickContinuar(page);
+            // Procurar na lista (o overlay do omni-select CDK)
+            // Usa regex case-insensitive para suportar "RJ (Rio de..." e pega o primeiro botão/div da lista
+            const ufOption = page.locator('.cdk-overlay-container').locator(`text=/${input.vehicle.uf}/i`).first();
+            
+            if (await ufOption.isVisible({ timeout: 5000 }).catch(() => false)) {
+                await ufOption.click({ force: true });
+                console.log(`[OmniAdapter] Opção UF clicada com sucesso!`);
+            } else {
+                console.log(`[OmniAdapter] Fallback: Tentando ArrowDown + Enter (opção não visível no DOM)`);
+                // Como digitamos a UF, a primeira opção geralmente é a certa. ArrowDown + Enter seleciona nativamente.
+                await page.keyboard.press('ArrowDown');
+                await page.waitForTimeout(500);
+                await page.keyboard.press('Enter');
+            }
+            await page.waitForTimeout(1000);
+
+            // Continuar (placa+uf)
+            await this.clickOmniButton(page, 'Continuar');
+
+            // ── STEP 10: Espera inteligente — análise pós-veículo (~10s) ──
+            console.log('[OmniAdapter] Step 10 → ⏳ Aguardando análise do veículo...');
+            await this.smartWait(page, [
+                'input[testid="vehicle-value-input"]',    // campo de valor = seguiu
+                'app-denied-result-page',                 // negado
+            ], 30000);
+
+            // Check negação novamente
+            if (page.url().includes('negado/resultado') || await page.locator('app-denied-result-page').isVisible({ timeout: 1000 }).catch(() => false)) {
+                console.log('[OmniAdapter] ❌ Cliente NEGADO após análise de veículo.');
+                result.status = 'ERROR';
+                result.message = 'Perfil de crédito do cliente não atende aos critérios mínimos do Omni';
+                return result;
+            }
+
+            // ── STEP 11: Valor do veículo ──
+            console.log(`[OmniAdapter] Step 11 → Valor do veículo: R$ ${input.vehicle.price}`);
+            const vehicleValueInput = page.locator('input[testid="vehicle-value-input"], input[formcontrolname="vehicleValue"]').first();
+            await vehicleValueInput.waitFor({ state: 'visible', timeout: 10000 });
+            await this.fillCurrencyInput(page, vehicleValueInput, input.vehicle.price);
+
+            // Continuar (valor veículo)
+            await this.clickOmniButton(page, 'Continuar');
             await page.waitForTimeout(3000);
 
-            // ── STEP 6: Ano Modelo (select dropdown) ──
-            const yearValue = String(input.vehicle.year);
-            console.log(`[OmniAdapter] → Ano Modelo: ${yearValue}`);
-            const anoModelo = page.locator('select[formcontrolname="anoModelo"]');
-            await anoModelo.waitFor({ state: 'visible', timeout: 10000 });
+            // ── STEP 12: Valor da entrada ──
+            const entryValue = input.downPayment || 0;
+            console.log(`[OmniAdapter] Step 12 → Valor da entrada: R$ ${entryValue}`);
+            const downPaymentInput = page.locator('input[testid="down-payment-input"], input[formcontrolname="downPayment"]').first();
+            await downPaymentInput.waitFor({ state: 'visible', timeout: 10000 });
 
-            // Try by label first, then by value
+            // Raspar entrada mínima e máxima antes de preencher
+            let entryLimitsMsg = '';
             try {
-                await anoModelo.selectOption({ label: yearValue });
+                const limitsDiv = page.locator('div.down-payment__limits');
+                if (await limitsDiv.isVisible({ timeout: 3000 })) {
+                    const limitsText = await limitsDiv.innerText();
+                    console.log(`[OmniAdapter] 📊 Limites de entrada: ${limitsText}`);
+                    entryLimitsMsg = limitsText.replace(/\s+/g, ' ').trim();
+                }
             } catch {
-                await anoModelo.selectOption(yearValue);
-            }
-            await page.waitForTimeout(1500);
-
-            // ── STEP 7: Valor do Veículo ──
-            console.log(`[OmniAdapter] → Valor do Veículo: R$ ${input.vehicle.price}`);
-            await this.fillMoneyField(page, 'input[formcontrolname="valorVeiculo"]', input.vehicle.price);
-
-            // ── STEP 8: Valor a ser Financiado ──
-            const financeValue = input.vehicle.price - (input.downPayment || 0);
-            console.log(`[OmniAdapter] → Valor Financiado: R$ ${financeValue}`);
-            await this.fillMoneyField(page, 'input[formcontrolname="valorFinanciado"]', financeValue);
-
-            // ── STEP 9: Continuar → Consultando Dados (auto) → Simulação ──
-            console.log('[OmniAdapter] → Continuar (to simulation)...');
-            await this.clickContinuar(page);
-
-            // Wait for simulation results to load (step 2 is auto, step 3 shows results)
-            console.log('[OmniAdapter] ⏳ Waiting for simulation results...');
-            await page.waitForTimeout(8000);
-
-            // Wait for PARCELAS section to appear
-            try {
-                await page.locator('text=PARCELAS').waitFor({ state: 'visible', timeout: 30000 });
-                console.log('[OmniAdapter] ✅ Simulation results loaded!');
-            } catch {
-                console.log('[OmniAdapter] ⚠️ PARCELAS section not found, checking page content...');
-                const bodyText = await page.locator('body').innerText();
-                console.log(`[OmniAdapter] Page: ${bodyText.substring(0, 500)}`);
+                console.log('[OmniAdapter] ℹ️ Limites de entrada não encontrados.');
             }
 
-            // ── STEP 9.5: Configure Lojista Return ──
-            console.log('[OmniAdapter] Step 9.5: Configuring Lojista Return (RE)...');
-            try {
-                // Click gear icon
-                const gearBtn = page.locator('a.icon-full .fa-gear, a.icon-full:has(.fa-gear)').first();
-                if (await gearBtn.isVisible({ timeout: 5000 })) {
-                    await gearBtn.click({ force: true });
-                    await page.waitForTimeout(1500); // Wait for modal animation
+            await this.fillCurrencyInput(page, downPaymentInput, entryValue);
 
-                    const omniReturnVal = parseInt((input as any).options?.omniReturn || '0');
-                    console.log(`[OmniAdapter] Setting Return value to: ${omniReturnVal}`);
+            // Dar Enter para confirmar
+            await page.keyboard.press('Enter');
+            await page.waitForTimeout(2000);
 
-                    if (omniReturnVal >= 0 && omniReturnVal <= 5) {
-                        // The Omni slider uses a custom bootstrap-like slider component
-                        const sliderHandle = page.locator('slider-retorno .slider-handle[role="slider"], #slider-retorno ~ .slider .slider-handle').first();
-                        
-                        console.log('[OmniAdapter] Custom slider handle found. Attempting keyboard navigation.');
-                        if (await sliderHandle.isVisible({ timeout: 5000 }).catch(() => false)) {
-                            // Focus the handle to enable keyboard control (it has tabindex="0")
-                            await sliderHandle.click({ force: true });
-                            await sliderHandle.focus();
-                            await page.waitForTimeout(200);
-                            
-                            // Reset to 0
-                            await page.keyboard.press('Home');
-                            await page.waitForTimeout(500);
-                            
-                            // Increment with exactly the requested value
-                            for (let i = 0; i < omniReturnVal; i++) {
-                                await page.keyboard.press('ArrowRight');
-                                await page.waitForTimeout(300);
-                            }
+            // ── STEP 13: Configurar retorno do lojista (0-5 estrelas) ──
+            const omniReturnVal = parseInt(input.options?.omniReturn || '0');
+            console.log(`[OmniAdapter] Step 13 → Retorno lojista: ${omniReturnVal} estrela(s)`);
+
+            if (omniReturnVal > 0) {
+                try {
+                    // Clicar no botão/dropdown de estrelas
+                    const starButton = page.locator('button.installments__star-button, div.installments__dropdown-trigger').first();
+                    if (await starButton.isVisible({ timeout: 5000 })) {
+                        await starButton.click();
+                        await page.waitForTimeout(1000);
+
+                        // Selecionar o valor do dropdown (omni-dropdown)
+                        const dropdownItem = page.locator(`omni-dropdown >> text="${omniReturnVal}"`).first();
+                        if (await dropdownItem.isVisible({ timeout: 3000 }).catch(() => false)) {
+                            await dropdownItem.click();
                         } else {
-                            console.log('[OmniAdapter] fallback: injecting JS to set custom slider value directly.');
-                            // Fallback js injection: update the hidden configuration input
-                            await page.evaluate((val) => {
-                                const hiddenInput = document.querySelector('#slider-retorno') as HTMLInputElement;
-                                if (hiddenInput) {
-                                    hiddenInput.value = val.toString();
-                                    hiddenInput.setAttribute('value', val.toString());
-                                    hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
-                                    hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                }
-                            }, omniReturnVal);
+                            // Fallback: procurar por texto direto
+                            const altItem = page.locator(`text="${omniReturnVal}"`).last();
+                            await altItem.click();
                         }
+                        await page.waitForTimeout(1500);
+                        console.log(`[OmniAdapter] ✅ Retorno definido para ${omniReturnVal}`);
+                    } else {
+                        console.log('[OmniAdapter] ℹ️ Dropdown de estrelas não visível, mantendo valor padrão.');
                     }
-
-                    // Click Salvar (targeting the visible one inside the modal)
-                    const salvarBtn = page.locator('button.btn-full-orange:has-text("Salvar"):visible').first();
-                    await salvarBtn.click();
-                    
-                    console.log('[OmniAdapter] Aguardando 10 segundos para o recálculo...');
-                    await page.waitForTimeout(10000); // Increased from 5s to 10s based on user request
-                } else {
-                    console.log('[OmniAdapter] ℹ️ Gear icon not found, skipping RE configuration.');
+                } catch (e: any) {
+                    console.warn(`[OmniAdapter] ⚠️ Falha ao configurar retorno: ${e.message}`);
                 }
-            } catch (e: any) {
-                console.warn('[OmniAdapter] ⚠️ Failed to configure Return slider. Error:', e.message);
             }
 
-            // ── STEP 10: Scrape offers ──
-            console.log('[OmniAdapter] 📊 Scraping offers...');
+            // ── STEP 14: Esperar recálculo das parcelas ──
+            console.log('[OmniAdapter] Step 14 → ⏳ Aguardando recálculo de parcelas...');
+            await this.smartWait(page, [
+                'app-select-installment-card',
+                'div.card__content',
+            ], 20000);
+            // Pequena espera extra para estabilidade
+            await page.waitForTimeout(2000);
 
+            // ── STEP 15: Raspar parcelas ──
+            console.log('[OmniAdapter] Step 15 → 📊 Raspando parcelas...');
             const offersData = await page.evaluate(() => {
-                const offers: any[] = [];
+                const offers: { installments: number; monthlyPayment: number }[] = [];
 
-                // Strategy 1: Find all installment options in the PARCELAS section
-                // Pattern: "12x" + "R$ 2.924,45" displayed as radio/slider options
-                const allText = document.body.innerText;
+                // Estratégia 1: Buscar nos cards de parcela (app-select-installment-card)
+                const cards = document.querySelectorAll('app-select-installment-card');
+                cards.forEach(card => {
+                    const text = (card as HTMLElement).innerText || '';
+                    // Padrão: "60x de\nR$\u00a0872,23" ou "48x de R$ 966,26"
+                    const match = text.match(/(\d+)x\s*de\s*(?:\n|\s)*R\$\s*[^\d]*([\d.,]+)/);
+                    if (match) {
+                        const installments = parseInt(match[1]);
+                        const value = parseFloat(match[2].replace(/\./g, '').replace(',', '.'));
+                        if (installments > 0 && value > 0) {
+                            offers.push({ installments, monthlyPayment: value });
+                        }
+                    }
+                });
 
-                // Match patterns like "12x\nR$ 2.924,45"
-                const regex = /(\d+)x\s*(?:\n|\s)*R\$\s*([\d.,]+)/g;
-                let match;
-                while ((match = regex.exec(allText)) !== null) {
-                    const installments = parseInt(match[1]);
-                    const value = parseFloat(match[2].replace(/\./g, '').replace(',', '.'));
-                    if (installments > 0 && value > 0 && installments <= 120) {
-                        offers.push({ installments, monthlyPayment: value });
+                // Estratégia 2: Regex global se a primeira falhar
+                if (offers.length === 0) {
+                    const allText = document.body.innerText;
+                    const regex = /(\d+)x\s*de\s*(?:\n|\s)*R\$\s*[^\d]*([\d.,]+)/g;
+                    let match;
+                    while ((match = regex.exec(allText)) !== null) {
+                        const installments = parseInt(match[1]);
+                        const value = parseFloat(match[2].replace(/\./g, '').replace(',', '.'));
+                        if (installments > 0 && value > 0 && installments <= 120) {
+                            offers.push({ installments, monthlyPayment: value });
+                        }
                     }
                 }
 
-                // Strategy 2: Look for structured elements (radio buttons, slider marks)
-                if (offers.length === 0) {
-                    const elements = document.querySelectorAll('[class*="parcela"], [class*="installment"], .mat-radio-button, input[type="radio"] + label');
-                    elements.forEach(el => {
-                        const text = (el as HTMLElement).innerText || '';
-                        const m = text.match(/(\d+)x.*?R\$\s*([\d.,]+)/);
-                        if (m) {
-                            offers.push({
-                                installments: parseInt(m[1]),
-                                monthlyPayment: parseFloat(m[2].replace(/\./g, '').replace(',', '.'))
-                            });
-                        }
-                    });
-                }
-
-                // Deduplicate
-                const unique = new Map<number, any>();
+                // Deduplicar
+                const unique = new Map<number, { installments: number; monthlyPayment: number }>();
                 offers.forEach(o => unique.set(o.installments, o));
                 return Array.from(unique.values()).sort((a, b) => a.installments - b.installments);
             });
 
             console.log(`[OmniAdapter] Found ${offersData.length} offers:`, offersData);
 
-            // Map to SimulationOffer format
+            // Mapear para SimulationOffer
             result.offers = offersData.map((o: any) => ({
                 bankId: this.id,
                 installments: o.installments,
@@ -249,20 +333,16 @@ export class OmniAdapter implements BankAdapter {
                 hasHighChance: false,
             } as SimulationOffer));
 
-            // Try to extract max finance value from the page
-            try {
-                const maxFinText = await page.locator('text=/Valor Máximo.*R\\$/').first().textContent({ timeout: 3000 });
-                if (maxFinText) {
-                    console.log(`[OmniAdapter] ${maxFinText.trim()}`);
-                }
-            } catch { }
-
             if (result.offers.length > 0) {
                 result.status = 'SUCCESS';
-                console.log(`[OmniAdapter] ✅ ${result.offers.length} offers scraped!`);
+                // Incluir limites de entrada no message para o front
+                if (entryLimitsMsg) {
+                    result.message = entryLimitsMsg;
+                }
+                console.log(`[OmniAdapter] ✅ ${result.offers.length} parcelas extraídas!`);
             } else {
-                console.warn('[OmniAdapter] ⚠️ No offers found.');
-                result.message = 'No installment offers found on results page';
+                console.warn('[OmniAdapter] ⚠️ Nenhuma parcela encontrada.');
+                result.message = 'Nenhuma parcela encontrada na página de resultados';
             }
 
             return result;
@@ -278,42 +358,52 @@ export class OmniAdapter implements BankAdapter {
     // HELPERS
     // =============================
 
-    /** Click a div.selector by partial text match */
-    private async clickSelector(page: Page, text: string): Promise<void> {
+    /** Clicar no omni-button pelo texto (novo sistema Angular) */
+    private async clickOmniButton(page: Page, text: string): Promise<void> {
         try {
-            const el = page.locator(`div.selector:has-text("${text}"), app-button-selector:has-text("${text}")`).first();
-            if (await el.isVisible({ timeout: 3000 })) {
-                await el.click();
-            }
+            // Tenta encontrar o botão visível com o texto correto
+            const btn = page.locator(`omni-button:has-text("${text}") button, button:has(span.text-label:has-text("${text}"))`).first();
+            await btn.waitFor({ state: 'visible', timeout: 8000 });
+            await btn.click();
         } catch {
-            console.warn(`[OmniAdapter] Selector "${text}" not found or already selected.`);
+            // Fallback: qualquer botão contendo o texto
+            console.warn(`[OmniAdapter] clickOmniButton fallback for "${text}"`);
+            const fallback = page.locator(`button:has-text("${text}"):visible`).first();
+            await fallback.click();
         }
     }
 
-    /** Click the Continuar button via JS (Angular SPA has hidden duplicates) */
-    private async clickContinuar(page: Page): Promise<void> {
-        await page.evaluate(() => {
-            const btns = document.querySelectorAll('a.bt-go.btn-full-orange');
-            // Click the last visible one (current step)
-            const visible = Array.from(btns).filter(el => {
-                const rect = (el as HTMLElement).getBoundingClientRect();
-                return rect.width > 0 && rect.height > 0;
-            });
-            const target = visible.length > 0 ? visible[visible.length - 1] : btns[btns.length - 1];
-            if (target) (target as HTMLElement).click();
-        });
+    /** Espera inteligente — aguarda qualquer um dos seletores aparecer */
+    private async smartWait(page: Page, selectors: string[], timeout: number): Promise<boolean> {
+        const startTime = Date.now();
+        const pollInterval = 1000;
+
+        while (Date.now() - startTime < timeout) {
+            for (const selector of selectors) {
+                try {
+                    const el = page.locator(selector).first();
+                    if (await el.isVisible({ timeout: 200 })) {
+                        console.log(`[OmniAdapter] ✅ smartWait: "${selector}" visível após ${Date.now() - startTime}ms`);
+                        return true;
+                    }
+                } catch { }
+            }
+            await page.waitForTimeout(pollInterval);
+        }
+
+        console.warn(`[OmniAdapter] ⚠️ smartWait: timeout de ${timeout}ms atingido sem encontrar nenhum seletor.`);
+        return false;
     }
 
-    /** Fill a money-masked input field */
-    private async fillMoneyField(page: Page, selector: string, value: number): Promise<void> {
-        const field = page.locator(selector);
-        await field.waitFor({ state: 'visible', timeout: 5000 });
-        await field.click({ clickCount: 3 });
+    /** Preencher input de moeda com máscara (currencymask) */
+    private async fillCurrencyInput(page: Page, locator: any, value: number): Promise<void> {
+        await locator.click({ clickCount: 3 });
         await page.keyboard.press('Backspace');
         await page.keyboard.press('Control+A');
         await page.keyboard.press('Backspace');
-        // Money mask expects cents
-        await page.keyboard.type(Math.round(value * 100).toString(), { delay: 30 });
+        // Digitar o valor como centavos (mask de moeda espera isso)
+        const cents = Math.round(value * 100).toString();
+        await page.keyboard.type(cents, { delay: 30 });
         await page.keyboard.press('Tab');
         await page.waitForTimeout(1000);
     }

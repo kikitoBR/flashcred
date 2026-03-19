@@ -65,6 +65,15 @@ export const clientService = {
         });
         if (!response.ok) throw new Error('Failed to create client');
         return response.json();
+    },
+    update: async (id: string, data: any) => {
+        const response = await fetch(`${API_URL}/clients/${id}`, {
+            method: 'PUT',
+            headers: getHeaders(),
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) throw new Error('Failed to update client');
+        return response.json();
     }
 };
 

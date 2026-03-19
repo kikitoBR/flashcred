@@ -47,7 +47,7 @@ export const Statistics = () => {
     const [remarketingList, setRemarketingList] = useState<any[]>([]);
     const [retryList, setRetryList] = useState<any[]>([]);
     const [simulationHistory, setSimulationHistory] = useState<any[]>([]);
-    const [kpiData, setKpiData] = useState({ todaySims: 0, todayApprovals: 0, totalFinanced: 0 });
+    const [kpiData, setKpiData] = useState({ totalSims: 0, todaySims: 0, todayApprovals: 0, totalFinanced: 0 });
 
     const fetchData = async () => {
         try {
@@ -61,6 +61,7 @@ export const Statistics = () => {
             setSalesData(stats.monthlyPerformance || []);
             setBankPerformanceData(stats.bankPerformance || []);
             setKpiData({
+                totalSims: stats.totalSimulations || 0,
                 todaySims: stats.todaySimulations,
                 todayApprovals: stats.todayApprovals,
                 totalFinanced: stats.totalFinanced
@@ -269,6 +270,38 @@ export const Statistics = () => {
                     </div>
                     <div className="flex gap-2 w-full md:w-auto">
                         <Button className="w-full md:w-auto" variant="primary" icon={<FileText className="w-4 h-4" />} onClick={handleExportClick}>Exportar PDF</Button>
+                    </div>
+                </div>
+
+                {/* KPI Summary Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+                            <History size={14} className="text-blue-500"/> Total Simulações
+                        </p>
+                        <p className="text-3xl font-bold text-slate-800 mt-2">{kpiData.totalSims}</p>
+                        <p className="text-xs text-slate-400 mt-1">Histórico completo</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+                            <Zap size={14} className="text-emerald-500"/> Simulações Hoje
+                        </p>
+                        <p className="text-3xl font-bold text-slate-800 mt-2">{kpiData.todaySims}</p>
+                        <p className="text-xs text-slate-400 mt-1">Nas últimas 24h</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+                            <TrendingUp size={14} className="text-emerald-600"/> Aprovações Hoje
+                        </p>
+                        <p className="text-3xl font-bold text-emerald-600 mt-2">{kpiData.todayApprovals}</p>
+                        <p className="text-xs text-slate-400 mt-1">Taxa de sucesso diária</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4 text-white shadow-lg flex flex-col justify-between">
+                        <p className="text-slate-300 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+                             Financiado Hoje
+                        </p>
+                        <p className="text-2xl font-bold mt-2">R$ {(kpiData.totalFinanced / 1000).toFixed(1)}k</p>
+                        <p className="text-xs text-slate-400 mt-1 text-emerald-400 font-medium">Ticket de aprovação</p>
                     </div>
                 </div>
 
