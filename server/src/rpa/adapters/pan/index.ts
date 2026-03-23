@@ -163,9 +163,29 @@ export class PanAdapter implements BankAdapter {
             const simularBtn = page.locator('mahoe-button[variant="primary"] button, button:has-text("Simular")').first();
             await simularBtn.waitFor({ state: 'visible', timeout: 10000 });
             await simularBtn.click({ force: true });
-            console.log('[PanAdapter] Simular clicked! Pausing for 30 seconds as requested...');
-            await page.waitForTimeout(30000);
-            console.log('[PanAdapter] 30 seconds wait finished, waiting for results...');
+            
+            console.log('[PanAdapter] Simular clicked! Monitoring for rejection modal for up to 30 seconds...');
+            let isRejected = false;
+            try {
+                // This acts as our 30-second delay. If the modal appears, it resolves early and we abort.
+                // If the modal never appears, it throws a TimeoutError after 30s, fulfilling the delay requirement.
+                await page.waitForSelector('.pan-mahoe-modal__body:has-text("Proposta recusada"), h1:has-text("Proposta recusada")', { state: 'visible', timeout: 30000 });
+                isRejected = true;
+            } catch {
+                isRejected = false;
+            }
+
+            if (isRejected) {
+                console.log('[PanAdapter] ❌ Proposta recusada modal detected!');
+                return { 
+                    bankId: this.id, 
+                    status: 'ERROR', 
+                    message: 'Proposta recusada. Não conseguimos aprovar o crédito com as condições digitadas.', 
+                    offers: [] 
+                };
+            }
+
+            console.log('[PanAdapter] 30 seconds wait finished (or no rejection found), waiting for results cards...');
             
             // Step 7.5: Configurar Retorno PAN (R0-R4)
             try {

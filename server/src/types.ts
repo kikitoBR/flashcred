@@ -72,6 +72,7 @@ export interface SimulationOffer {
     hasHighChance?: boolean;
   }[];
   reason?: string;
+  warning?: string;
 }
 
 export interface SimulationResult {

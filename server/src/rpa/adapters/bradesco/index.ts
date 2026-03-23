@@ -5,6 +5,7 @@ export class BradescoAdapter implements BankAdapter {
     id = 'bradesco';
     name = 'Bradesco Financiamentos';
     private baseUrl = 'https://turbo.bradesco/originacaolojista/login';
+    private passwordExpiringWarning = false;
 
     // =============================
     // LOGIN
@@ -58,7 +59,7 @@ export class BradescoAdapter implements BankAdapter {
                 // Click Entrar
                 const loginBtn = page.locator('button[type="submit"]:has-text("Entrar")').first();
                 await loginBtn.waitFor({ state: 'visible', timeout: 5000 });
-                
+
                 // Try standard click, fallback to JS event evaluation if intercepted
                 try {
                     await loginBtn.click({ delay: 100 });
@@ -81,6 +82,17 @@ export class BradescoAdapter implements BankAdapter {
                     if (raceResult === 'success') {
                         console.log(`[BradescoAdapter] ✅ Login OK → ${page.url()}`);
                         await page.waitForTimeout(3000); // SPA stabilization
+
+                        // Check for password expiration button
+                        console.log(`[BradescoAdapter] Checking for Password Expiration warning...`);
+                        const trocarSenhaBtn = page.locator('button:has-text("Trocar senha depois")').first();
+                        if (await trocarSenhaBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                            console.log(`[BradescoAdapter] ⚠️ Password expiration modal detected! Clicking 'Trocar senha depois'.`);
+                            this.passwordExpiringWarning = true;
+                            await trocarSenhaBtn.click({ force: true });
+                            await page.waitForTimeout(2000); // Wait for modal to close
+                        }
+
                         return true;
                     } else if (raceResult === 'recaptcha_error') {
                         console.log(`[BradescoAdapter] ⚠️ reCAPTCHA error on attempt ${loginAttempts}. Retrying...`);
@@ -97,7 +109,7 @@ export class BradescoAdapter implements BankAdapter {
                     return false;
                 }
             }
-            
+
             console.error('[BradescoAdapter] ❌ Login failed - Max attempts reached.');
             return false;
         } catch (error: any) {
@@ -123,7 +135,7 @@ export class BradescoAdapter implements BankAdapter {
             const novaPropostaBtn = page.locator('.button-new-proposal, button:has-text("Nova proposta")').first();
             await novaPropostaBtn.waitFor({ state: 'visible', timeout: 15000 });
             await novaPropostaBtn.click({ force: true });
-            
+
             // ── Step 2: Fill Client CPF & Celular ──
             console.log('[BradescoAdapter] Step 2: Filling Client CPF and Celular...');
             const cpfField = page.locator('input[formcontrolname="numeroDocumento"], input[mask="000.000.000-00"]').last();
@@ -139,11 +151,11 @@ export class BradescoAdapter implements BankAdapter {
             await phoneField.fill('');
             const phoneClean = (input.client.phone || '11999999999').replace(/\D/g, '');
             await page.keyboard.type(phoneClean, { delay: 50 });
-            
+
             // ── Step 3: Avançar ──
             const avancarBtn1 = page.locator('button:has-text("Avançar")').first();
             await avancarBtn1.click();
-            
+
             console.log('[BradescoAdapter] Waiting to see next step (Birthdate modal, Error modal, or UF Selection)...');
             try {
                 const nextStep = await Promise.race([
@@ -165,7 +177,7 @@ export class BradescoAdapter implements BankAdapter {
             console.log('[BradescoAdapter] Step 4: Checking for extra info modal...');
             const birthDateField = page.locator('input[formcontrolname="dataDeNascimento"]').first();
             const isModalVisible = await birthDateField.isVisible().catch(() => false);
-            
+
             if (isModalVisible) {
                 console.log('[BradescoAdapter] → Modal identified. Filling Birth Date and Gender...');
                 await birthDateField.click();
@@ -188,7 +200,7 @@ export class BradescoAdapter implements BankAdapter {
                 const confirmarModalBtn = page.locator('button:has-text("Confirmar")').first();
                 await confirmarModalBtn.click();
                 await page.waitForTimeout(2000);
-                
+
                 // Click Avançar again if present
                 const avancarBtn2 = page.locator('button:has-text("Avançar")').first();
                 if (await avancarBtn2.isVisible()) {
@@ -201,7 +213,7 @@ export class BradescoAdapter implements BankAdapter {
             console.log('[BradescoAdapter] Step 5: Filling UF and Plate...');
             const uf = input.vehicle.uf || 'SP';
             await this.selectMatOption(page, 'mat-select[formcontrolname="ufDeLicenciamento"]', uf);
-            
+
             const plateField = page.locator('input[formcontrolname="plateNumber"]').first();
             await plateField.waitFor({ state: 'visible', timeout: 5000 });
             await plateField.click();
@@ -228,7 +240,7 @@ export class BradescoAdapter implements BankAdapter {
             await valorVeiculoField.click({ clickCount: 3 });
             await page.waitForTimeout(200);
             await page.keyboard.type(this.formatCurrency(input.vehicle.price), { delay: 30 });
-            
+
             const downPayment = input.downPayment || 0;
             const entryField = page.locator('input[formcontrolname="valorDeEntrada"]').first();
             await entryField.click({ clickCount: 3 });
@@ -258,15 +270,15 @@ export class BradescoAdapter implements BankAdapter {
                 const reInput = page.locator('input[formcontrolname="rePercentage"]').first();
                 await reInput.waitFor({ state: 'visible', timeout: 15000 }); // Aumentado para 15s
                 await reInput.click({ clickCount: 3 });
-                
+
                 // Get configured RE from the frontend options, fallback to '0'
                 const reCoefficientStr = (input as any).options?.bradescoReturn || '0';
-                
+
                 // Se o frontend mandar "6", ao digitar "6" na mascara ele formata "0,6%"
                 // Precisamos enviar "600" para virar "6,00%"
                 const reCoefficientValue = parseFloat(reCoefficientStr);
                 const typedValue = isNaN(reCoefficientValue) ? '0' : (reCoefficientValue * 100).toString();
-                
+
                 await page.keyboard.type(typedValue, { delay: 50 });
                 await page.waitForTimeout(500);
 
@@ -277,7 +289,7 @@ export class BradescoAdapter implements BankAdapter {
                 } else {
                     await page.keyboard.press('Enter'); // Fallback
                 }
-                
+
                 console.log('[BradescoAdapter] Aguardando 20 segundos para o recálculo...');
                 await page.waitForTimeout(20000); // 20s for recalculation as requested
             } catch (e: any) {
@@ -287,7 +299,7 @@ export class BradescoAdapter implements BankAdapter {
             // ── Step 10: Extract Installments ──
             console.log('[BradescoAdapter] Step 10: Extracting simulation installments...');
             const offers: SimulationOffer[] = [];
-            
+
             try {
                 // Wait for the toggles containing parts
                 const installmentContainer = page.locator('wl-payment-installment-toggle');
@@ -301,7 +313,7 @@ export class BradescoAdapter implements BankAdapter {
                 for (let i = 0; i < count; i++) {
                     const btn = buttons.nth(i);
                     const text = await btn.textContent() || '';
-                    
+
                     // Format is usually: "60x de R$ 875,08"
                     const monthsMatch = text.match(/(\d+)\s*x/i);
                     const valueMatch = text.match(/R\$\s*([\d.,]+)/i);
@@ -309,7 +321,7 @@ export class BradescoAdapter implements BankAdapter {
                     if (monthsMatch && valueMatch) {
                         const months = parseInt(monthsMatch[1], 10);
                         const monthlyPayment = parseFloat(valueMatch[1].replace(/\./g, '').replace(',', '.'));
-                        
+
                         offers.push({
                             bankId: this.id,
                             installments: months,
@@ -326,9 +338,17 @@ export class BradescoAdapter implements BankAdapter {
 
             result.offers = offers;
             result.status = offers.length > 0 ? 'SUCCESS' : 'ERROR';
-            result.message = offers.length > 0 
-                ? `Collected ${offers.length} installment options` 
+            result.message = offers.length > 0
+                ? `Collected ${offers.length} installment options`
                 : 'No installment data could be extracted';
+
+            if (offers.length > 0) {
+                result.status = 'SUCCESS';
+                result.offers = offers.sort((a, b) => b.installments - a.installments);
+            }
+            if (this.passwordExpiringWarning) {
+                result.warning = 'As credenciais do Bradesco irão expirar em breve. Acesse o portal oficial para trocar as credenciais.';
+            }
 
             console.log(`[BradescoAdapter] ✅ Simulation complete. ${offers.length} offers collected.`);
 
@@ -340,7 +360,7 @@ export class BradescoAdapter implements BankAdapter {
             try {
                 const screenshotBuffer = await page.screenshot({ fullPage: true });
                 result.screenshot = screenshotBuffer.toString('base64');
-            } catch {}
+            } catch { }
         }
 
         return result;

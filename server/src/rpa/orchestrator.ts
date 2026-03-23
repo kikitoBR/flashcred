@@ -159,7 +159,8 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                                 hasHighChance: o.hasHighChance,
                                 description: o.description
                             })),
-                            reason: simulationResult.message
+                            reason: simulationResult.message,
+                            warning: simulationResult.warning
                         };
                     } else {
                         return {

@@ -76,6 +76,7 @@ export interface SimulationOffer {
     downPayment: number;
     installments: { months: number; value: number; interestRate?: number; hasHighChance?: boolean; description?: string; }[];
     reason?: string;
+  warning?: string;
 }
 
 export interface BankCredential {

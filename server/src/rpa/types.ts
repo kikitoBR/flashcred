@@ -55,6 +55,7 @@ export interface SimulationResult {
     bankId: string;
     status: 'SUCCESS' | 'ERROR' | 'LOGIN_FAILED' | 'BLOCKED';
     message?: string;
+    warning?: string;
     offers: SimulationOffer[];
     screenshot?: string; // Base64 or path
     htmlDump?: string; // For debugging

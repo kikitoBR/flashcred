@@ -948,6 +948,13 @@ export const NewSimulation = () => {
                                                     <AlertCircle size={16} /> Motivo: {offer.reason}
                                                 </div>
                                             )}
+                                            
+                                            {offer.warning && (
+                                                <div className="bg-amber-100 p-3 mt-4 rounded-lg text-amber-800 text-sm flex items-center gap-2 animate-fade-in border border-amber-300">
+                                                    <AlertCircle size={16} className="text-amber-600" />
+                                                    <span className="font-medium">{offer.warning}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </Card>
                                 );
