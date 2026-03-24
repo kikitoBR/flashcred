@@ -110,7 +110,7 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                 const adapter = createAdapter(internalBankId);
                 if (!adapter) {
                     console.warn(`[Orchestrator] No adapter for ${internalBankId}`);
-                    return { bankId: bank, status: 'ERROR', reason: `No adapter for ${internalBankId}` };
+                    return { bankId: bank, status: 'REJECTED', reason: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.' };
                 }
 
                 // Fetch credentials using original frontend ID to match DB
@@ -118,7 +118,7 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                 const credentials = await credentialService.getCredentials(bank, tenantId);
                 if (!credentials) {
                     console.error(`[Orchestrator] No credentials for ${bank}`);
-                    return { bankId: bank, status: 'ERROR', reason: `No credentials for ${internalBankId}` };
+                    return { bankId: bank, status: 'REJECTED', reason: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.' };
                 }
 
                 // Each bank gets its own browser context (isolated session)
@@ -136,7 +136,7 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                     const loggedIn = await adapter.login(page, credentials);
                     if (!loggedIn) {
                         console.error(`[Orchestrator] Login failed for ${internalBankId}`);
-                        return { bankId: bank, status: 'ERROR', reason: 'Login failed' };
+                        return { bankId: bank, status: 'REJECTED', reason: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.' };
                     }
 
                     console.log(`[Orchestrator] ✅ Login OK for ${internalBankId}`);
@@ -166,12 +166,12 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                         return {
                             bankId: bank,
                             status: 'REJECTED',
-                            reason: simulationResult.message || 'Simulation failed'
+                            reason: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.'
                         };
                     }
                 } catch (error: any) {
                     console.error(`[Orchestrator] Error for ${internalBankId}:`, error.message);
-                    return { bankId: bank, status: 'ERROR', reason: error.message };
+                    return { bankId: bank, status: 'REJECTED', reason: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.' };
                 } finally {
                     await context.close();
                 }

@@ -48,11 +48,11 @@ export class C6Adapter implements BankAdapter {
 
                 // Handle Promo Banner
                 try {
-                    const bannerCloseBtn = page.locator('button[mat-dialog-close]');
-                    if (await bannerCloseBtn.isVisible({ timeout: 5000 })) {
-                        await bannerCloseBtn.click();
-                        console.log('[C6Adapter] Promo banner closed.');
-                    }
+                    const bannerCloseBtn = page.locator('app-massive-communication-modal button[mat-dialog-close]').first();
+                    await bannerCloseBtn.waitFor({ state: 'visible', timeout: 10000 });
+                    await bannerCloseBtn.click({ force: true });
+                    console.log('[C6Adapter] Promo banner closed.');
+                    await page.waitForTimeout(1000);
                 } catch { }
 
                 return true;
@@ -77,10 +77,11 @@ export class C6Adapter implements BankAdapter {
         try {
             // Check promo banner again just in case
             try {
-                const bannerCloseBtn = page.locator('button[mat-dialog-close]');
-                if (await bannerCloseBtn.isVisible({ timeout: 2000 })) {
-                    await bannerCloseBtn.click();
-                }
+                const bannerCloseBtn = page.locator('app-massive-communication-modal button[mat-dialog-close]').first();
+                await bannerCloseBtn.waitFor({ state: 'visible', timeout: 5000 });
+                await bannerCloseBtn.click({ force: true });
+                console.log('[C6Adapter] Promo banner closed (second attempt).');
+                await page.waitForTimeout(1000);
             } catch { }
 
             // ── STEP 1: New Proposal ──
@@ -134,12 +135,39 @@ export class C6Adapter implements BankAdapter {
             // ── Wait for Simulation Results ──
             console.log('[C6Adapter] ⏳ Waiting for simulation results...');
             try {
-                // Aguarda ativamente o botão de parcela ser renderizado no DOM ou overlay sumir (até 35s)
-                await page.waitForSelector('button.parcela-button', { state: 'visible', timeout: 35000 });
-                // Pequena pausa para garantir que animações Angular terminaram
+                // Race between success (button.parcela-button) and rejection modal (app-simulation-not-completed-modal)
+                const raceResult = await Promise.race([
+                    page.waitForSelector('button.parcela-button', { state: 'visible', timeout: 35000 }).then(() => 'APPROVED'),
+                    page.waitForSelector('app-simulation-not-completed-modal', { state: 'visible', timeout: 35000 }).then(() => 'REJECTED')
+                ]);
+
+                if (raceResult === 'REJECTED') {
+                    console.log('[C6Adapter] ❌ Rejection modal detected. Extracting message...');
+                    // Extract the text
+                    const title = await page.locator('app-simulation-not-completed-modal h2').innerText().catch(() => 'Proposta recusada');
+                    const reason = await page.locator('app-simulation-not-completed-modal p').innerText().catch(() => 'Não atende aos requisitos');
+                    
+                    result.status = 'ERROR'; // or 'REJECTED' based on the system typing. But frontend shows 'REJECTED' if we pass it, actually let's check types.
+                    // Wait, earlier I saw the frontend check sim.status === 'REJECTED'. So I'll use 'REJECTED'. 
+                    // Let's modify result to REJECTED.
+                    result.status = 'REJECTED';
+                    result.message = `${title} - ${reason}`;
+                    
+                    console.log(`[C6Adapter] Rejection reason: ${result.message}`);
+                    
+                    // Click the close button so the page is clean
+                    const closeModalBtn = page.locator('app-simulation-not-completed-modal button[mat-dialog-close]').first();
+                    if (await closeModalBtn.isVisible({ timeout: 2000 })) {
+                        await closeModalBtn.click({ force: true });
+                    }
+                    
+                    return result;
+                }
+
+                // Se chegou aqui, foi aprovado/tem parcelas
                 await page.waitForTimeout(2000);
             } catch (e) {
-                console.log('[C6Adapter] ⏳ TIMEOUT: button.parcela-button não apareceu num intervalo de 35s. Tentando seguir em frente...');
+                console.log('[C6Adapter] ⏳ TIMEOUT: Neither success buttons nor rejection modal appeared in 35s. Proceeding...');
             }
 
             // ── STEP 5: Dealer Return (Configurações do Lojista) ──

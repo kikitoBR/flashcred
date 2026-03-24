@@ -53,7 +53,7 @@ export interface SimulationOffer {
 
 export interface SimulationResult {
     bankId: string;
-    status: 'SUCCESS' | 'ERROR' | 'LOGIN_FAILED' | 'BLOCKED';
+    status: 'SUCCESS' | 'ERROR' | 'LOGIN_FAILED' | 'BLOCKED' | 'REJECTED';
     message?: string;
     warning?: string;
     offers: SimulationOffer[];

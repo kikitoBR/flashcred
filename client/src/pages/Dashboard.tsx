@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { Button, Card, Badge } from '../components/ui';
 import { salesService } from '../services/api';
+import { C6CommunicationModal } from '../components/C6CommunicationModal';
 
 interface DashboardStats {
     todaySimulations: number;
@@ -29,6 +30,7 @@ export const Dashboard = () => {
     const navigate = useNavigate();
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isC6ModalOpen, setIsC6ModalOpen] = useState(false);
 
     const fetchStats = async () => {
         try {
@@ -82,6 +84,9 @@ export const Dashboard = () => {
                     <p className="text-slate-500 text-sm">Bem-vindo de volta ao FlashCred.</p>
                 </div>
                 <div className="flex gap-2">
+                    <Button variant="outline" className="hidden lg:flex border-[#FACC15]/50 text-slate-700 hover:bg-[#FACC15]/10 hover:border-[#FACC15]" onClick={() => setIsC6ModalOpen(true)}>
+                        Ver Comunicado C6
+                    </Button>
                     <Button variant="ghost" icon={<RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />} onClick={fetchStats}>
                         Atualizar
                     </Button>
@@ -195,6 +200,11 @@ export const Dashboard = () => {
                     <Button variant="outline" className="w-full mt-4 text-xs" onClick={() => navigate('/statistics')}>Ver Histórico Completo</Button>
                 </Card>
             </div>
+
+            <C6CommunicationModal 
+                isOpen={isC6ModalOpen} 
+                onClose={() => setIsC6ModalOpen(false)} 
+            />
         </div>
     );
 };
