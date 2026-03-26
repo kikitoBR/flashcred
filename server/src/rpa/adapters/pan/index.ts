@@ -42,6 +42,18 @@ export class PanAdapter implements BankAdapter {
             await entrarBtn.waitFor({ state: 'visible', timeout: 10000 });
             await entrarBtn.click();
 
+            // Check for invalid credentials message before waiting for redirect
+            try {
+                const errorAlert = page.locator('.alert__text:has-text("Usuário ou senha inválido")');
+                const hasInvalidCreds = await errorAlert.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
+                if (hasInvalidCreds) {
+                    console.error('[PanAdapter] ❌ Login failed — Usuário ou senha inválido.');
+                    throw new Error('Usuário ou senha inválido.');
+                }
+            } catch (e: any) {
+                if (e.message === 'Usuário ou senha inválido.') throw e;
+            }
+
             // Wait for redirect to /captura/inicio
             try {
                 await page.waitForURL(url => url.toString().includes('/captura/inicio'), { timeout: 30000 });
@@ -54,6 +66,9 @@ export class PanAdapter implements BankAdapter {
             }
         } catch (error: any) {
             console.error('[PanAdapter] Login exception:', error.message);
+            if (error.message === 'Usuário ou senha inválido.') {
+                throw error;
+            }
             return false;
         }
     }
@@ -163,7 +178,7 @@ export class PanAdapter implements BankAdapter {
             const simularBtn = page.locator('mahoe-button[variant="primary"] button, button:has-text("Simular")').first();
             await simularBtn.waitFor({ state: 'visible', timeout: 10000 });
             await simularBtn.click({ force: true });
-            
+
             console.log('[PanAdapter] Simular clicked! Monitoring for rejection modal for up to 30 seconds...');
             let isRejected = false;
             try {
@@ -177,16 +192,16 @@ export class PanAdapter implements BankAdapter {
 
             if (isRejected) {
                 console.log('[PanAdapter] ❌ Proposta recusada modal detected!');
-                return { 
-                    bankId: this.id, 
-                    status: 'ERROR', 
-                    message: 'Proposta recusada. Não conseguimos aprovar o crédito com as condições digitadas.', 
-                    offers: [] 
+                return {
+                    bankId: this.id,
+                    status: 'ERROR',
+                    message: 'Proposta recusada. Não conseguimos aprovar o crédito com as condições digitadas.',
+                    offers: []
                 };
             }
 
             console.log('[PanAdapter] 30 seconds wait finished (or no rejection found), waiting for results cards...');
-            
+
             // Step 7.5: Configurar Retorno PAN (R0-R4)
             try {
                 // Wait for the first card to ensure we're targeting the most recent simulation
@@ -202,11 +217,11 @@ export class PanAdapter implements BankAdapter {
 
                 const panReturn = input.options?.panReturn || '3'; // Default R3
                 const returnVal = panReturn.replace('R', '');
-                
+
                 console.log(`[PanAdapter] Ajustando Retorno PAN para R${returnVal}...`);
                 const slider = page.locator('input[type="range"][id*="Retorno"]');
                 await slider.waitFor({ state: 'visible', timeout: 10000 });
-                
+
                 // Set the value using evaluate to trigger events properly
                 await slider.evaluate((node: HTMLInputElement, val) => {
                     node.value = val;
@@ -253,18 +268,18 @@ export class PanAdapter implements BankAdapter {
                         radioCards.forEach(card => {
                             const text = (card as HTMLElement).innerText?.trim();
                             if (!text) return;
-                            
+
                             const instMatch = text.match(/(\d+)\s*parcelas/i) || text.match(/(\d+)\s*[x×]/i);
                             const valMatch = text.match(/R\$\s*([\d.,]+)/i);
-                            
+
                             const isApproved = text.toLowerCase().includes('aprovado');
                             const isUnavailable = text.toLowerCase().includes('indisponível');
-                            
+
                             if (instMatch && valMatch && (isApproved || isUnavailable)) {
                                 const installments = parseInt(instMatch[1]);
                                 const paymentStr = valMatch[1].replace(/\./g, '').replace(',', '.');
                                 const monthlyPayment = parseFloat(paymentStr);
-                                
+
                                 // Extract required minimum downpayment if unavailable
                                 let requiredEntry = 0;
                                 if (isUnavailable) {
@@ -363,8 +378,8 @@ export class PanAdapter implements BankAdapter {
                 totalValue: o.installments * o.monthlyPayment,
                 interestRate: o.interestRate || 0,
                 // Pass custom description to show required downpayment for unavailable options
-                description: o.isApproved === false && o.requiredEntry > 0 ? `Indisponível - Entrada Mínima: R$ ${o.requiredEntry.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : (o.text || `${o.installments}x`),
-                hasHighChance: o.isApproved !== false, 
+                description: o.isApproved === false && o.requiredEntry > 0 ? `Indisponível - Entrada Mínima: R$ ${o.requiredEntry.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : (o.text || `${o.installments}x`),
+                hasHighChance: o.isApproved !== false,
                 // We'll mark the specific ones as rejected if they are unavailable 
                 status: o.isApproved === false ? 'REJECTED' : 'APPROVED' // Note: 'status' isn't explicitly in SimulationOffer, but frontend map checks for overall simulation result
             })) as SimulationOffer[];

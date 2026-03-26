@@ -136,7 +136,7 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                     const loggedIn = await adapter.login(page, credentials);
                     if (!loggedIn) {
                         console.error(`[Orchestrator] Login failed for ${internalBankId}`);
-                        return { bankId: bank, status: 'REJECTED', reason: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.' };
+                        return { bankId: bank, status: 'LOGIN_FAILED', reason: 'Falha geral ao conectar no sistema do banco.' };
                     }
 
                     console.log(`[Orchestrator] ✅ Login OK for ${internalBankId}`);
@@ -166,11 +166,20 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                         return {
                             bankId: bank,
                             status: 'REJECTED',
-                            reason: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.'
+                            reason: simulationResult.message || 'Cliente não aprovado: Não temos condições aprováveis para este cliente.'
                         };
                     }
                 } catch (error: any) {
                     console.error(`[Orchestrator] Error for ${internalBankId}:`, error.message);
+                    if (
+                        error.message === 'Usuário ou senha inválida' || 
+                        error.message === 'Usuário e/ou senha inválido(s)' || 
+                        error.message === 'Nome de usuário ou senha inválida' ||
+                        error.message === 'CPF inválido ou senha incorreta' ||
+                        error.message === 'Usuário ou senha inválido.'
+                    ) {
+                        return { bankId: bank, status: 'REJECTED', reason: 'Usuário e/ou senha inválido(s)' };
+                    }
                     return { bankId: bank, status: 'REJECTED', reason: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.' };
                 } finally {
                     await context.close();

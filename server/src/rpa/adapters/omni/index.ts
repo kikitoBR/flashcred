@@ -38,6 +38,14 @@ export class OmniAdapter implements BankAdapter {
             // Botão "Continuar"
             await this.clickOmniButton(page, 'Continuar');
 
+            // Verifica credenciais inválidas
+            const errorAlert = page.locator('.form-input_error-alert:has-text("Usuário ou senha")');
+            const hasInvalidCreds = await errorAlert.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+            if (hasInvalidCreds) {
+                console.error('[OmniAdapter] ❌ Login failed — Usuário e/ou senha inválido(s)');
+                throw new Error('Usuário e/ou senha inválido(s)');
+            }
+
             // Esperar redirecionamento (sair de /login)
             try {
                 await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 25000 });
@@ -50,6 +58,9 @@ export class OmniAdapter implements BankAdapter {
             }
         } catch (error: any) {
             console.error('[OmniAdapter] Login exception:', error.message);
+            if (error.message === 'Usuário e/ou senha inválido(s)') {
+                throw error;
+            }
             return false;
         }
     }
@@ -114,13 +125,14 @@ export class OmniAdapter implements BankAdapter {
                 'input[testid="telephone-input"]',       // telefone = aprovado
                 'input.telephone-page__input',            // telefone alternativo
                 'app-denied-result-page',                 // negado
+                '.denied-page__content'                   // novo fallback para negado
             ], 45000);
 
             // ── STEP 7: Detecção de negado ──
-            if (page.url().includes('negado/resultado') || await page.locator('app-denied-result-page').isVisible({ timeout: 1000 }).catch(() => false)) {
+            if (page.url().includes('negado/resultado') || await page.locator('app-denied-result-page, .denied-page__content').isVisible({ timeout: 1000 }).catch(() => false)) {
                 console.log('[OmniAdapter] ❌ Cliente NEGADO pelo banco Omni.');
                 result.status = 'ERROR';
-                result.message = 'Perfil de crédito do cliente não atende aos critérios mínimos do Omni';
+                result.message = 'Cliente não aprovado: Não temos condições aprováveis para este cliente.';
                 return result;
             }
 
@@ -174,7 +186,7 @@ export class OmniAdapter implements BankAdapter {
             // Procurar na lista (o overlay do omni-select CDK)
             // Usa regex case-insensitive para suportar "RJ (Rio de..." e pega o primeiro botão/div da lista
             const ufOption = page.locator('.cdk-overlay-container').locator(`text=/${input.vehicle.uf}/i`).first();
-            
+
             if (await ufOption.isVisible({ timeout: 5000 }).catch(() => false)) {
                 await ufOption.click({ force: true });
                 console.log(`[OmniAdapter] Opção UF clicada com sucesso!`);
@@ -195,13 +207,14 @@ export class OmniAdapter implements BankAdapter {
             await this.smartWait(page, [
                 'input[testid="vehicle-value-input"]',    // campo de valor = seguiu
                 'app-denied-result-page',                 // negado
+                '.denied-page__content'                   // novo fallback para negado
             ], 30000);
 
             // Check negação novamente
-            if (page.url().includes('negado/resultado') || await page.locator('app-denied-result-page').isVisible({ timeout: 1000 }).catch(() => false)) {
+            if (page.url().includes('negado/resultado') || await page.locator('app-denied-result-page, .denied-page__content').isVisible({ timeout: 1000 }).catch(() => false)) {
                 console.log('[OmniAdapter] ❌ Cliente NEGADO após análise de veículo.');
                 result.status = 'ERROR';
-                result.message = 'Perfil de crédito do cliente não atende aos critérios mínimos do Omni';
+                result.message = 'Cliente não aprovado: Não temos condições aprováveis para este cliente.';
                 return result;
             }
 

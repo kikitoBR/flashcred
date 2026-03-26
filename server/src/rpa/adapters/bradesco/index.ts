@@ -72,6 +72,18 @@ export class BradescoAdapter implements BankAdapter {
                     });
                 }
 
+                // Verifica credenciais inválidas antes
+                try {
+                    const errorAlert = page.locator('app-alert-message p:has-text("CPF inválido ou senha incorreta")');
+                    const hasInvalidCreds = await errorAlert.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
+                    if (hasInvalidCreds) {
+                        console.error('[BradescoAdapter] ❌ Login failed — CPF inválido ou senha incorreta');
+                        throw new Error('CPF inválido ou senha incorreta');
+                    }
+                } catch (e: any) {
+                    if (e.message === 'CPF inválido ou senha incorreta') throw e;
+                }
+
                 // Wait for navigation away from login OR reCAPTCHA error
                 try {
                     const raceResult = await Promise.race([
@@ -114,6 +126,9 @@ export class BradescoAdapter implements BankAdapter {
             return false;
         } catch (error: any) {
             console.error('[BradescoAdapter] Login exception:', error.message);
+            if (error.message === 'CPF inválido ou senha incorreta') {
+                throw error;
+            }
             return false;
         }
     }

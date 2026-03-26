@@ -19,6 +19,18 @@ export class ItauAdapter implements BankAdapter {
             await frame.click('#kc-login');
             await page.waitForLoadState('networkidle');
 
+            // Verifica credenciais inválidas antes de seguir
+            try {
+                const errorAlert = page.frameLocator('iframe[src*="accounts-vehicle.itau.com.br"]').locator('#input-error:has-text("Nome de usuário")');
+                const hasInvalidCreds = await errorAlert.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+                if (hasInvalidCreds) {
+                    console.error('[ItauAdapter] ❌ Login failed — Usuário e/ou senha inválido(s)');
+                    throw new Error('Usuário e/ou senha inválido(s)');
+                }
+            } catch (e: any) {
+                if (e.message === 'Usuário e/ou senha inválido(s)') throw e;
+            }
+
             // Handle "É hora de aproveitar!" popup - Aggressive JS approach
             try {
                 console.log('[ItauAdapter] Checking for popup (Login phase) with JS...');
@@ -54,7 +66,11 @@ export class ItauAdapter implements BankAdapter {
             }
 
             return true;
-        } catch (error) {
+        } catch (error: any) {
+            console.error('[ItauAdapter] Login exception:', error.message);
+            if (error.message === 'Usuário e/ou senha inválido(s)') {
+                throw error;
+            }
             return false;
         }
     }
@@ -114,7 +130,7 @@ export class ItauAdapter implements BankAdapter {
                     // Clean text (remove icon texts like "aviso_outline" or excess spaces)
                     const cleanMsg = msgText.replace(/aviso_outline/i, '').replace(/\s+/g, ' ').trim();
                     console.error(`[ItauAdapter] ❌ CPF Rejected: ${cleanMsg}`);
-                    
+
                     result.status = 'ERROR';
                     result.message = `Cliente não aprovado: ${cleanMsg}`;
                     return result; // Interrompe imediatamente a simulação
@@ -241,12 +257,12 @@ export class ItauAdapter implements BankAdapter {
                 console.log('[ItauAdapter] Checking if simulaton was rejected due to minimum down payment...');
                 // O HTML possui a estrutura .ids-d-flex contendo "Não aprovamos"
                 const notApprovedContent = page.locator('div.ids-d-flex, .ids-flex-wrap').filter({ hasText: 'Não aprovamos' }).first();
-                
+
                 if (await notApprovedContent.isVisible({ timeout: 2000 })) {
                     // Tenta encontrar a label especifica que diz "abaixo de R$ X de entrada"
                     const minEntrySpan = notApprovedContent.locator('span[aria-label*="de entrada"], span[aria-label*="abaixo de"]').first();
                     let minEntryMsg = '';
-                    
+
                     if (await minEntrySpan.isVisible()) {
                         minEntryMsg = await minEntrySpan.getAttribute('aria-label') || await minEntrySpan.innerText();
                     } else {
@@ -256,7 +272,7 @@ export class ItauAdapter implements BankAdapter {
 
                     const cleanMsg = minEntryMsg.replace(/\s+/g, ' ').trim();
                     console.error(`[ItauAdapter] ❌ Simulation rejected by Itau: ${cleanMsg}`);
-                    
+
                     result.status = 'ERROR';
                     result.message = `Simulação não aprovada pelo Itaú: ${cleanMsg}`;
                     // Retorna cedo, parando a automação e não vai para a etapa de Return ou Scraping
@@ -287,25 +303,25 @@ export class ItauAdapter implements BankAdapter {
                         // 3. Pick the option corresponding to the Return value (0 to 5, etc)
                         // This is an Angular component <ids-select>. It opens a cdk-overlay container.
                         console.log('[ItauAdapter] Focusing dropdown and using keyboard navigation...');
-                        
+
                         try {
                             // Ensure focus on the combobox
                             await selectCombo.focus();
                             // Press Home to jump to the first option (R0)
                             await page.keyboard.press('Home');
                             await page.waitForTimeout(300);
-                            
+
                             // Press ArrowDown the exact amount of times to reach the desired return (e.g. 4 times for R4)
                             const targetIndex = parseInt(itauReturnVal);
                             for (let i = 0; i < targetIndex; i++) {
                                 await page.keyboard.press('ArrowDown');
                                 await page.waitForTimeout(150);
                             }
-                            
+
                             // Press Enter to confirm selection
                             await page.keyboard.press('Enter');
                             await page.waitForTimeout(500);
-                            
+
                             // Verify if the value visually updated, if not, try JS injection
                             const currentText = await selectCombo.innerText();
                             if (!currentText.includes(itauReturnVal)) {
@@ -330,8 +346,8 @@ export class ItauAdapter implements BankAdapter {
                         const applyBtn = page.locator('button[data-cy="apply-return-button"], button:has-text("Alterar retorno")').first();
                         await applyBtn.click({ force: true });
                         console.log('[ItauAdapter] Return updated. Waiting 8s for recalculation...');
-                        
-                        await page.waitForTimeout(8000); 
+
+                        await page.waitForTimeout(8000);
 
                         // Also look for any 'Recalcular' button just in case changing the value triggers the need to click it
                         const recalcBtnAgain = await page.locator('button:has-text("Recalcular"), button:has-text("Atualizar")').first();

@@ -41,6 +41,18 @@ export class C6Adapter implements BankAdapter {
             // Click Acessar
             await page.locator('#kc-login').click({ force: true });
 
+            // Check for invalid credentials message before waiting for redirect
+            try {
+                const errorAlert = page.locator('#input-error:has-text("Invalid username or password")');
+                const hasInvalidCreds = await errorAlert.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
+                if (hasInvalidCreds) {
+                    console.error('[C6Adapter] ❌ Login failed — Invalid username or password.');
+                    throw new Error('Usuário e/ou senha inválido(s)');
+                }
+            } catch (e: any) {
+                if (e.message === 'Usuário e/ou senha inválido(s)') throw e;
+            }
+
             // Wait for redirect to portal home
             try {
                 await page.waitForURL(url => !url.toString().includes('/login') && !url.toString().includes('auth'), { timeout: 20000 });
@@ -63,6 +75,9 @@ export class C6Adapter implements BankAdapter {
             }
         } catch (error: any) {
             console.error('[C6Adapter] Login exception:', error.message);
+            if (error.message === 'Usuário e/ou senha inválido(s)') {
+                throw error;
+            }
             return false;
         }
     }

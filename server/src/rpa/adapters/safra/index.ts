@@ -71,6 +71,18 @@ export class SafraAdapter implements BankAdapter {
                 });
             }
 
+            // Verifica credenciais inválidas antes de esperar o redirecionamento
+            try {
+                const errorAlert = page.locator('span.text-danger-dark:has-text("Usuário e/ou senha inválido(s)")');
+                const hasInvalidCreds = await errorAlert.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+                if (hasInvalidCreds) {
+                    console.error('[SafraAdapter] ❌ Login failed — Usuário e/ou senha inválido(s)');
+                    throw new Error('Usuário e/ou senha inválido(s)');
+                }
+            } catch (e: any) {
+                if (e.message === 'Usuário e/ou senha inválido(s)') throw e;
+            }
+
             // Wait for redirect away from /login
             try {
                 await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 45000 });
@@ -87,6 +99,9 @@ export class SafraAdapter implements BankAdapter {
             }
         } catch (error: any) {
             console.error('[SafraAdapter] Login exception:', error.message);
+            if (error.message === 'Usuário e/ou senha inválido(s)') {
+                throw error;
+            }
             return false;
         }
     }
