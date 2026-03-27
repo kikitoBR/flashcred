@@ -33,21 +33,9 @@ export const NewSimulation = () => {
     const [step, setStep] = useGlobalState('step', 1, simulationState, setSimulationState);
 
     // Selection State
-    const [simulationType, setSimulationType] = useGlobalState<'registered' | 'guest'>('simulationType', 'registered', simulationState, setSimulationState);
     const [selectedClient, setSelectedClient] = useGlobalState<string>('selectedClient', '', simulationState, setSimulationState);
     const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
     const [clientSearchTerm, setClientSearchTerm] = useGlobalState('clientSearchTerm', '', simulationState, setSimulationState);
-
-    // Guest State
-    const [guestData, setGuestData] = useGlobalState('guestData', {
-        name: '',
-        cpf: '',
-        phone: '',
-        birthDate: '',
-        hasCnh: false,
-        categories: [] as string[],
-        score: '500'
-    }, simulationState, setSimulationState);
 
     // Vehicle Selection
     const [selectedVehicle, setSelectedVehicle] = useGlobalState<string>('selectedVehicle', '', simulationState, setSimulationState);
@@ -108,20 +96,7 @@ export const NewSimulation = () => {
                 );
 
                 if (foundClient) {
-                    setSimulationType('registered');
                     setSelectedClient(foundClient.id);
-                } else {
-                    // If not found in DB, use Guest Mode and pre-fill data
-                    setSimulationType('guest');
-                    setGuestData({
-                        name: preSelectedClient.name || '',
-                        cpf: preSelectedClient.cpf || '',
-                        phone: preSelectedClient.phone || '',
-                        score: preSelectedClient.score ? preSelectedClient.score.toString() : '500',
-                        hasCnh: false,
-                        categories: [],
-                        birthDate: ''
-                    });
                 }
             }
 
@@ -143,27 +118,9 @@ export const NewSimulation = () => {
         }
     }, [location.state, clients, vehicles]);
 
-    // Resolved Client Object (Either from DB or Temporary Guest)
+    // Resolved Client Object (From DB)
     const getClientForSimulation = (): Client | undefined => {
-        if (simulationType === 'registered') {
-            return clients.find(c => c.id === selectedClient);
-        } else {
-            // Create temporary guest client object
-            if (!guestData.name || !guestData.cpf) return undefined;
-            return {
-                id: `guest-${Date.now()}`,
-                name: guestData.name,
-                cpf: guestData.cpf,
-                income: 5000,
-                score: Number(guestData.score),
-                status: 'ACTIVE',
-                email: 'nao_cadastrado@simulacao.com',
-                phone: guestData.phone,
-                birthDate: guestData.birthDate,
-                address: { street: '', number: '', neighborhood: '', city: '', state: '', zipCode: '' },
-                cnh: { hasCnh: guestData.hasCnh, categories: guestData.categories }
-            };
-        }
+        return clients.find(c => c.id === selectedClient);
     };
 
     const client = getClientForSimulation();
@@ -186,16 +143,6 @@ export const NewSimulation = () => {
         } else {
             setSelectedBanks([...selectedBanks, id]);
         }
-    };
-
-    const toggleGuestCnhCategory = (cat: string) => {
-        setGuestData(prev => {
-            const currentCats = prev.categories;
-            const newCats = currentCats.includes(cat)
-                ? currentCats.filter(c => c !== cat)
-                : [...currentCats, cat];
-            return { ...prev, categories: newCats };
-        });
     };
 
     const getScoreColor = (score: number) => {
@@ -290,8 +237,8 @@ export const NewSimulation = () => {
 
         setSimulationResults(results);
 
-        // Update Client Score only if registered
-        if (simulationType === 'registered') {
+        // Update Client Score
+        if (client) {
             // Filter out technical failures that shouldn't affect the score
             const validResultsForScore = results.filter(r => {
                 if (r.status === 'REJECTED' && r.reason) {
@@ -318,7 +265,7 @@ export const NewSimulation = () => {
         // Save simulation to history
         try {
             await salesService.logSimulation({
-                clientId: simulationType === 'registered' ? client.id : undefined,
+                clientId: client.id,
                 clientName: client.name,
                 clientCpf: client.cpf,
                 vehicleId: vehicle.id,
@@ -401,144 +348,82 @@ export const NewSimulation = () => {
                         <div className="space-y-2">
                             <div className="flex justify-between items-center h-8 mb-1">
                                 <label className="block text-sm font-semibold text-slate-700">Cliente</label>
-                                <div className="flex p-1 bg-slate-100 rounded-lg">
-                                    <button
-                                        className={`text-[10px] px-2 py-1 rounded font-bold transition-all ${simulationType === 'registered' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}
-                                        onClick={() => setSimulationType('registered')}
-                                    >
-                                        Cadastrado
-                                    </button>
-                                    <button
-                                        className={`text-[10px] px-2 py-1 rounded font-bold transition-all ${simulationType === 'guest' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500'}`}
-                                        onClick={() => setSimulationType('guest')}
-                                    >
-                                        Rápido
-                                    </button>
-                                </div>
                             </div>
 
-                            {simulationType === 'registered' ? (
-                                <div className="space-y-2 relative">
-                                    <div
-                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center cursor-pointer hover:border-emerald-400 transition-colors h-[46px]"
-                                        onClick={() => {
-                                            setIsClientDropdownOpen(!isClientDropdownOpen);
-                                            if (!isClientDropdownOpen) setClientSearchTerm('');
-                                        }}
-                                    >
-                                        {selectedClient ? (
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-white text-xs font-bold">
-                                                    {clients.find(c => c.id === selectedClient)?.name?.charAt(0)}
-                                                </div>
-                                                <span className="text-sm font-medium text-slate-900">{clients.find(c => c.id === selectedClient)?.name}</span>
+                            <div className="space-y-2 relative">
+                                <div
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center cursor-pointer hover:border-emerald-400 transition-colors h-[46px]"
+                                    onClick={() => {
+                                        setIsClientDropdownOpen(!isClientDropdownOpen);
+                                        if (!isClientDropdownOpen) setClientSearchTerm('');
+                                    }}
+                                >
+                                    {selectedClient ? (
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-white text-xs font-bold">
+                                                {clients.find(c => c.id === selectedClient)?.name?.charAt(0)}
                                             </div>
-                                        ) : (
-                                            <span className="text-sm text-slate-500">Selecione um cliente...</span>
-                                        )}
-                                        <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
-                                    </div>
-                                    {isClientDropdownOpen && (
-                                        <div className="absolute z-20 top-full left-0 w-full bg-white border border-slate-200 rounded-xl shadow-2xl mt-1 overflow-hidden animate-fade-in">
-                                            <div className="p-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
-                                                <input
-                                                    autoFocus
-                                                    className="w-full pl-3 pr-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                                                    placeholder="🔍 Buscar por nome ou CPF..."
-                                                    value={clientSearchTerm}
-                                                    onChange={e => setClientSearchTerm(e.target.value)}
-                                                />
-                                            </div>
-                                            <div className="max-h-72 overflow-y-auto">
-                                                {filteredClientsForDropdown.length === 0 ? (
-                                                    <div className="p-6 text-center text-slate-400">
-                                                        <p className="text-sm">Nenhum cliente encontrado</p>
-                                                    </div>
-                                                ) : (
-                                                    filteredClientsForDropdown.map(c => (
-                                                        <div
-                                                            key={c.id}
-                                                            className={`p-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-50 flex items-center gap-3 transition-colors ${selectedClient === c.id ? 'bg-emerald-50 border-l-4 border-l-emerald-500' : ''}`}
-                                                            onClick={() => {
-                                                                setSelectedClient(c.id);
-                                                                setIsClientDropdownOpen(false);
-                                                            }}
-                                                        >
-                                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white text-sm font-bold shadow-md">
-                                                                {c.name?.charAt(0)}
-                                                            </div>
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-sm font-semibold text-slate-800 truncate">{c.name}</p>
-                                                                <p className="text-xs text-slate-400 font-mono">{c.cpf}</p>
-                                                            </div>
-                                                            <div className="flex flex-col items-end gap-1">
-                                                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${(c.score || 0) >= 700 ? 'bg-emerald-100 text-emerald-700' :
-                                                                    (c.score || 0) >= 500 ? 'bg-amber-100 text-amber-700' :
-                                                                        'bg-red-100 text-red-700'
-                                                                    }`}>
-                                                                    {c.score || 0}
-                                                                </span>
-                                                                {c.cnh?.hasCnh && (
-                                                                    <span className="text-[10px] text-slate-400">CNH ✓</span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </div>
-                                            <div className="p-2 bg-slate-50 border-t border-slate-100 text-center">
-                                                <span className="text-xs text-slate-400">{filteredClientsForDropdown.length} cliente(s)</span>
-                                            </div>
+                                            <span className="text-sm font-medium text-slate-900">{clients.find(c => c.id === selectedClient)?.name}</span>
                                         </div>
+                                    ) : (
+                                        <span className="text-sm text-slate-500">Selecione um cliente...</span>
                                     )}
+                                    <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
                                 </div>
-                            ) : (
-                                <div className="space-y-3 p-4 bg-amber-50 rounded-lg border border-amber-100">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <Input label="Nome" value={guestData.name} onChange={(e: any) => setGuestData({ ...guestData, name: e.target.value })} required />
-                                        <Input label="CPF" value={guestData.cpf} onChange={(e: any) => setGuestData({ ...guestData, cpf: e.target.value })} required />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <Input label="Data de Nascimento" type="date" value={guestData.birthDate} onChange={(e: any) => setGuestData({ ...guestData, birthDate: e.target.value })} />
-                                        <Input label="Telefone" value={guestData.phone} onChange={(e: any) => setGuestData({ ...guestData, phone: e.target.value })} />
-                                    </div>
-                                    <div className="pt-1">
-                                        <label className="flex items-center gap-2">
+                                {isClientDropdownOpen && (
+                                    <div className="absolute z-20 top-full left-0 w-full bg-white border border-slate-200 rounded-xl shadow-2xl mt-1 overflow-hidden animate-fade-in">
+                                        <div className="p-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
                                             <input
-                                                type="checkbox"
-                                                checked={guestData.hasCnh}
-                                                onChange={e => setGuestData({ ...guestData, hasCnh: e.target.checked, categories: e.target.checked ? guestData.categories : [] })}
-                                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                                                autoFocus
+                                                className="w-full pl-3 pr-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                                placeholder="🔍 Buscar por nome ou CPF..."
+                                                value={clientSearchTerm}
+                                                onChange={e => setClientSearchTerm(e.target.value)}
                                             />
-                                            <span className="text-sm font-medium text-slate-700">Possui CNH?</span>
-                                        </label>
-
-                                        {guestData.hasCnh && (
-                                            <div className="flex gap-2 mt-2">
-                                                {['A', 'B', 'C', 'D', 'E'].map(cat => (
-                                                    <button
-                                                        key={cat}
-                                                        type="button"
+                                        </div>
+                                        <div className="max-h-72 overflow-y-auto">
+                                            {filteredClientsForDropdown.length === 0 ? (
+                                                <div className="p-6 text-center text-slate-400">
+                                                    <p className="text-sm">Nenhum cliente encontrado</p>
+                                                </div>
+                                            ) : (
+                                                filteredClientsForDropdown.map(c => (
+                                                    <div
+                                                        key={c.id}
+                                                        className={`p-3 hover:bg-emerald-50 cursor-pointer border-b border-slate-50 flex items-center gap-3 transition-colors ${selectedClient === c.id ? 'bg-emerald-50 border-l-4 border-l-emerald-500' : ''}`}
                                                         onClick={() => {
-                                                            const currentCats = guestData.categories;
-                                                            const newCats = currentCats.includes(cat)
-                                                                ? currentCats.filter(c => c !== cat)
-                                                                : [...currentCats, cat];
-                                                            setGuestData({ ...guestData, categories: newCats });
+                                                            setSelectedClient(c.id);
+                                                            setIsClientDropdownOpen(false);
                                                         }}
-                                                        className={`w-9 h-9 rounded font-bold text-sm transition-colors ${guestData.categories.includes(cat)
-                                                            ? 'bg-emerald-500 text-white shadow-md'
-                                                            : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
-                                                            }`}
                                                     >
-                                                        {cat}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
+                                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white text-sm font-bold shadow-md">
+                                                            {c.name?.charAt(0)}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-semibold text-slate-800 truncate">{c.name}</p>
+                                                            <p className="text-xs text-slate-400 font-mono">{c.cpf}</p>
+                                                        </div>
+                                                        <div className="flex flex-col items-end gap-1">
+                                                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${(c.score || 0) >= 700 ? 'bg-emerald-100 text-emerald-700' :
+                                                                (c.score || 0) >= 500 ? 'bg-amber-100 text-amber-700' :
+                                                                    'bg-red-100 text-red-700'
+                                                                }`}>
+                                                                {c.score || 0}
+                                                            </span>
+                                                            {c.cnh?.hasCnh && (
+                                                                <span className="text-[10px] text-slate-400">CNH ✓</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                        <div className="p-2 bg-slate-50 border-t border-slate-100 text-center">
+                                            <span className="text-xs text-slate-400">{filteredClientsForDropdown.length} cliente(s)</span>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
 
                         <div className="space-y-2">
