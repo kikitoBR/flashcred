@@ -206,49 +206,90 @@ export class ItauAdapter implements BankAdapter {
             await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
             await page.waitForTimeout(2000);
 
-            // ── LER MENSAGEM "NÃO APROVAMOS ABAIXO DE R$ X" ANTES DE TUDO ──
-            if (input.downPayment && input.downPayment > 0) {
-                try {
-                    const rejectionNotice = await page.locator('.ids-d-flex.ids-flex-wrap:has(p:has-text("Não aprovamos"))').first();
-                    if (await rejectionNotice.isVisible()) {
-                        const fullText = await rejectionNotice.innerText();
-                        console.log(`[ItauAdapter] Found early rejection notice: "${fullText.replace(/\n/g, ' ')}"`);
-                        
-                        const match = fullText.match(/R\$\s*([\d.,]+)/);
-                        if (match) {
-                            const minValCents = parseInt(match[1].replace(/\D/g, ''), 10);
-                            const requestedCents = Math.round(input.downPayment * 100);
+            // ── NOVO: CAPTURAR ENTRADA MÍNIMA QUE JÁ APARECE NA TELA / INPUT ──
+            try {
+                const entryInput = await page.locator('text="Valor de entrada" >> xpath=following::input[1]').first();
+                if (await entryInput.isVisible()) {
+                    await entryInput.scrollIntoViewIfNeeded();
+                    await page.waitForTimeout(500);
+
+                    let minDPFound = false;
+
+                    // 1. Procurar primeiro pelo texto explícito "Não aprovamos abaixo de..." ou similares que revelam a mínima REAL
+                    const notices = [
+                        page.locator('span[aria-label*="abaixo de"]').first(),
+                        page.locator('.ids-d-flex.ids-flex-wrap:has(p:has-text("Não aprovamos"))').first(),
+                        page.locator('span[aria-label*="de entrada"]').first(),
+                        page.locator('.ids-form-message--error').filter({ hasText: /abaixo|m[ií]nima/i }).first()
+                    ];
+
+                    for (const notice of notices) {
+                        if (minDPFound) break;
+                        if (await notice.isVisible().catch(() => false)) {
+                            // tenta extrair o arial-label para resolver o non-breaking space ou fall back para innerText
+                            const ariaLabelText = await notice.getAttribute('aria-label').catch(() => null);
+                            const innerText = await notice.innerText().catch(() => '');
+                            const fullText = ariaLabelText || innerText;
                             
-                            // Se a entrada pedida for menor que a entrada mínima exigida pelo banco, para o processo
-                            if (requestedCents < minValCents) {
-                                const formattedMinEntry = (minValCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                                console.error(`[ItauAdapter] ❌ Missing minimum down payment. Requested: ${requestedCents/100}, Minimum Required: ${minValCents/100}`);
-                                result.status = 'ERROR';
-                                result.message = `Motivo: Simulação não aprovada pelo Itaú: abaixo de ${formattedMinEntry} de entrada.`;
-                                return result;
+                            const match = fullText.match(/R\$\s*([\d.,]+)/);
+                            if (match) {
+                                const minValCents = parseInt(match[1].replace(/\D/g, ''), 10);
+                                result.minDownPayment = minValCents / 100;
+                                console.log(`[ItauAdapter] 💰 Minimum down payment captured from informative text (source of truth): R$ ${result.minDownPayment}`);
+                                minDPFound = true;
                             }
                         }
                     }
-                } catch (err) {
-                    console.log(`[ItauAdapter] Early notice check failed (ignoring): ${err}`);
+
+                    // 2. Se não achou texto na tela, aí sim usa o que estiver pré-preenchido no input de Entrada
+                    if (!minDPFound) {
+                        const prefilledVal = await entryInput.inputValue();
+                        if (prefilledVal && prefilledVal.replace(/\D/g, '') !== '00') {
+                            const numericStr = prefilledVal.replace(/[^\d,-]/g, '').replace(',', '.');
+                            const minValFloat = parseFloat(numericStr);
+                            if (minValFloat >= 0) {
+                                result.minDownPayment = minValFloat;
+                                console.log(`[ItauAdapter] 💰 Minimum down payment captured from pre-filled input (fallback): R$ ${result.minDownPayment}`);
+                                minDPFound = true;
+                            }
+                        }
+                    }
+
+                    if (!minDPFound) {
+                        console.log(`[ItauAdapter] No minimum down payment indication found on screen. Assuming minimum is 0.`);
+                    }
+
+                    // Numeric check: If we found a min down payment, and user requested less than that, abort early!
+                    if (result.minDownPayment !== undefined && result.minDownPayment >= 0 && input.downPayment !== undefined) {
+                        const requestedCents = Math.round(input.downPayment * 100);
+                        const minValCents = Math.round(result.minDownPayment * 100);
+                        
+                        if (requestedCents < minValCents) {
+                            const formattedMinEntry = result.minDownPayment.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                            console.error(`[ItauAdapter] ❌ Missing minimum down payment. Requested: ${requestedCents/100}, Minimum Required: ${minValCents/100}`);
+                            result.status = 'ERROR';
+                            result.message = `Motivo: Simulação não aprovada pelo Itaú: abaixo de ${formattedMinEntry} de entrada.`;
+                            return result;
+                        }
+                    }
                 }
+            } catch (err) {
+                console.log(`[ItauAdapter] Could not scrape minimum entry directly from field: ${err}`);
             }
 
-            // HANDLE DOWN PAYMENT (ENTRADA)
-            if (input.downPayment && input.downPayment > 0) {
+            // HANDLE DOWN PAYMENT (ENTRADA) ORIGINAL DO CLIENTE
+            if (input.downPayment !== undefined && input.downPayment >= 0) {
                 console.log('[ItauAdapter] Handling down payment field...');
 
                 try {
-                    // Strategy: Find label "Valor de entrada" and get the input immediately following it within the same container context usually
                     const entryInput = await page.locator('text="Valor de entrada" >> xpath=following::input[1]').first();
 
                     if (await entryInput.isVisible()) {
-                        console.log(`[ItauAdapter] Found entry field. Clearing pre-filled value...`);
+                        console.log(`[ItauAdapter] Found entry field. Filling with user down payment...`);
 
                         await entryInput.scrollIntoViewIfNeeded();
                         await page.waitForTimeout(500);
 
-                        // Aggressive clear: Click, Click x3, Backspace, Ctrl+A, Backspace
                         await entryInput.click({ force: true });
                         await page.waitForTimeout(200);
                         await entryInput.click({ clickCount: 3 });
@@ -447,7 +488,8 @@ export class ItauAdapter implements BankAdapter {
                 totalValue: o.installments * o.monthlyPayment,
                 interestRate: o.interestRate,
                 description: o.description,
-                hasHighChance: o.hasHighChance
+                hasHighChance: o.hasHighChance,
+                minDownPayment: result.minDownPayment
             })) as SimulationOffer[];
 
             if (result.offers.length > 0) {

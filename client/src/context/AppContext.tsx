@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Client, Vehicle, BankCredential } from '../types';
 import { clientService, vehicleService, credentialsService } from '../services/api';
+import { useAuth } from './AuthContext';
 
 export interface AppContextType {
     clients: Client[];
@@ -23,6 +24,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [bankCredentials, setBankCredentials] = useState<BankCredential[]>([]);
 
+    const { token } = useAuth();
+
     const refreshData = async () => {
         try {
             const [clientsData, vehiclesData, credentialsData] = await Promise.all([
@@ -39,8 +42,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     useEffect(() => {
-        refreshData();
-    }, []);
+        if (token) {
+            refreshData();
+        } else {
+            setClients([]);
+            setVehicles([]);
+            setBankCredentials([]);
+        }
+    }, [token]);
 
     const updateBankCredential = (data: BankCredential) => {
         setBankCredentials(prev => {

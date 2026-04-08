@@ -806,11 +806,16 @@ export const NewSimulation = () => {
                                             {offer.status === 'APPROVED' ? (
                                                     <div className="col-span-2 md:col-span-4 mt-4">
                                                         {/* Entrada Mínima (Omni e outros que fornecem) */}
-                                                        {offer.minDownPayment != null && offer.minDownPayment > 0 && (
-                                                            <div className="mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
-                                                                <span className="text-amber-600 text-sm">💰</span>
-                                                                <span className="text-sm text-amber-800 font-medium">
-                                                                    Entrada mínima: <strong className="text-amber-900">R$ {offer.minDownPayment.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                                        {offer.minDownPayment != null && offer.minDownPayment >= 0 && (
+                                                            <div className={`mb-4 flex items-center gap-2 border rounded-lg px-4 py-2.5 ${offer.minDownPayment === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                                                                <span className="text-sm">{offer.minDownPayment === 0 ? '🎉' : '💰'}</span>
+                                                                <span className={`text-sm font-medium ${offer.minDownPayment === 0 ? 'text-emerald-800' : 'text-amber-800'}`}>
+                                                                    Entrada mínima recomendada:{' '}
+                                                                    {offer.minDownPayment === 0 ? (
+                                                                        <strong className="text-emerald-700">R$ 0,00 (100% Financiado)</strong>
+                                                                    ) : (
+                                                                        <strong className="text-amber-900">R$ {offer.minDownPayment.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                                                    )}
                                                                 </span>
                                                             </div>
                                                         )}

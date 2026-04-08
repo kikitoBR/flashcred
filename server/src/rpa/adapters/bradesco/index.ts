@@ -319,6 +319,36 @@ export class BradescoAdapter implements BankAdapter {
                 console.warn('[BradescoAdapter] ⚠️ Failed to configure RE, proceeding with default. Error:', e.message);
             }
 
+            // ── Step 9.5: Capturar Entrada Mínima ──
+            try {
+                console.log('[BradescoAdapter] Step 9.5: Capturing minimum down payment...');
+                await page.waitForTimeout(2000); // Dar tempo pro DOM estabilizar
+                
+                const cardLabels = page.locator('.card-label, .button-card');
+                const labelCount = await cardLabels.count();
+                console.log(`[BradescoAdapter] Inspecting ${labelCount} card-labels for minimum entry...`);
+                
+                for (let i = 0; i < labelCount; i++) {
+                    const textContent = await cardLabels.nth(i).innerText().catch(() => ''); 
+                    if (textContent.match(/Entrada m[ií]nima/i)) {
+                        console.log(`[BradescoAdapter] Found minimum entry element: ${textContent.replace(/\n/g, ' ')}`);
+                        
+                        const match = textContent.match(/R\$\s*([\d.,]+)/);
+                        if (match) {
+                            const numericStr = match[1].replace(/[^\d,-]/g, '').replace(',', '.');
+                            const minValFloat = parseFloat(numericStr);
+                            if (minValFloat >= 0) { // ACCEPT ZERO
+                                result.minDownPayment = minValFloat;
+                                console.log(`[BradescoAdapter] 💰 Minimum down payment successfully captured: R$ ${result.minDownPayment}`);
+                                break; // Já achou, pode sair do loop
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.log(`[BradescoAdapter] Could not scrape minimum entry: ${err}`);
+            }
+
             // ── Step 10: Extract Installments ──
             console.log('[BradescoAdapter] Step 10: Extracting simulation installments...');
             const offers: SimulationOffer[] = [];
@@ -350,7 +380,8 @@ export class BradescoAdapter implements BankAdapter {
                             installments: months,
                             monthlyPayment: monthlyPayment,
                             interestRate: 0, // Not explicitly visible easily without expanding more UI components
-                            totalValue: monthlyPayment * months
+                            totalValue: monthlyPayment * months,
+                            minDownPayment: result.minDownPayment
                         });
                         console.log(`[BradescoAdapter] → ${months}x = R$ ${monthlyPayment.toFixed(2)}`);
                     }

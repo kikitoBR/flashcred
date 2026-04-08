@@ -50,6 +50,7 @@ export interface SimulationOffer {
     totalValue: number;
     description?: string;
     hasHighChance?: boolean;
+    minDownPayment?: number;
 }
 
 export interface SimulationResult {

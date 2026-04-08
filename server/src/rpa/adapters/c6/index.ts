@@ -246,42 +246,8 @@ export class C6Adapter implements BankAdapter {
             // Adicional: aguardar 5 segundos garantindo que todos os cálculos e animações terminem
             await page.waitForTimeout(5000);
 
-            // BEFORE extracting offers: handle minimum down payment extraction and resetting
-            let extractedMinDownPayment: number | undefined;
+            // BEFORE extracting offers, MINIMUM DOWNPAYMENT HAS BEEN MOVED DOWN
 
-            try {
-                console.log('[C6Adapter] 💰 Checking minimum down payment recommended...');
-                // 1. Click the recommended minimum dot
-                const minMarker = page.locator('circle.marker.min-marker').first();
-                if (await minMarker.isVisible({ timeout: 3000 })) {
-                    await minMarker.click({ force: true });
-                    await page.waitForTimeout(1500); // aguarda atualizar o input
-
-                    // 2. Read the value from the input
-                    const entradaInput = page.locator('#entrada');
-                    if (await entradaInput.isVisible({ timeout: 2000 })) {
-                        const valStr = await entradaInput.inputValue(); // e.g. "R$ 15.000,00" ou "15.000,00"
-                        if (valStr) {
-                            const numericStr = valStr.replace(/[^\d,-]/g, '').replace(',', '.');
-                            extractedMinDownPayment = parseFloat(numericStr);
-                            console.log(`[C6Adapter] Minimum recommended down payment: R$ ${extractedMinDownPayment}`);
-                            result.minimumDownPayment = extractedMinDownPayment;
-                        }
-
-                        // 3. Re-enter the original downPayment
-                        if (input.downPayment !== undefined) {
-                            console.log(`[C6Adapter] 🔄 Re-entering original downPayment: R$ ${input.downPayment}`);
-                            await this.fillMoneyField(page, '#entrada', input.downPayment);
-                            // Press tab to trigger recalculation or just wait
-                            await page.keyboard.press('Tab');
-                            console.log('[C6Adapter] ⏳ Waiting for recalculation after restoring down payment...');
-                            await page.waitForTimeout(6000); // wait for recalculation again
-                        }
-                    }
-                }
-            } catch (e) {
-                console.log('[C6Adapter] ⚠️ Could not extract/restore minimum down payment:', e);
-            }
 
             const offersData = await page.evaluate(() => {
                 const offers: any[] = [];
@@ -341,6 +307,82 @@ export class C6Adapter implements BankAdapter {
                 console.log('---------------------------------------');
 
                 result.message = 'Cliente não aprovado: Não temos condições aprováveis para este cliente.';
+            }
+
+            // Apos extrair as ofertas, checamos o valor mínimo de entrada na tela nova
+            let extractedMinDownPayment: number | undefined;
+
+            try {
+                console.log('[C6Adapter] 💰 Checking minimum down payment recommended...');
+                // 1. Click the recommended minimum dot
+                const minMarker = page.locator('circle.marker.min-marker').first();
+                if (await minMarker.isVisible({ timeout: 3000 })) {
+                    await minMarker.click({ force: true });
+                    console.log('[C6Adapter] ⏳ Waiting for recalculation after clicking min-marker...');
+                    await page.waitForTimeout(5000); // aguarda atualizar a pagina/span
+
+                    // 2. Read the value from the span.resumo-description
+                    // O valor minimo vai aparecer no resumo-description: "R$ 31.219,86"
+                    const valStrs = await page.evaluate(() => {
+                        return Array.from(document.querySelectorAll('span.resumo-description'))
+                            .map(el => el.textContent?.trim() || '')
+                            .filter(t => t.includes('R$'));
+                    });
+
+                    console.log(`[C6Adapter] Vals in resumo-description:`, valStrs);
+
+                    // Vamos procurar pelo valor que corresponda à "Entrada" (frequentemente e o segundo item na barra de resumo: Carro, Entrada, Financiado)
+                    // Mas na duvida, ou pegamos o valor da div q tem "Entrada"
+                    const minDPEntrada = await page.evaluate(() => {
+                        const allDivs = document.querySelectorAll('div');
+                        for (const div of Array.from(allDivs)) {
+                            // Procura o titulo "Entrada"
+                            if (div.textContent?.trim().toLowerCase() === 'entrada' || div.querySelector('.resumo-title')?.textContent?.trim().toLowerCase() === 'entrada') {
+                                const desc = div.parentElement?.querySelector('.resumo-description');
+                                if (desc && desc.textContent?.includes('R$')) return desc.textContent.trim();
+                            }
+                        }
+                        
+                        // Fallback: tentar pegar o element que esta do lado da label 'Entrada'
+                        const allSpans = document.querySelectorAll('span.resumo-description');
+                        for (const span of Array.from(allSpans)) {
+                            const parentText = span.parentElement?.textContent?.toLowerCase() || '';
+                            if (parentText.includes('entrada')) {
+                                return span.textContent?.trim();
+                            }
+                        }
+
+                        // Se nao achar pelo texto 'entrada', retorna o input original atualizado ou o ultimo span de R$ q faca sentido
+                        console.log("Fallback para #entrada ou segunda posicao");
+                        const inputEntrada = document.querySelector('#entrada') as HTMLInputElement;
+                        if (inputEntrada && inputEntrada.value) {
+                            return inputEntrada.value;
+                        }
+                        return null;
+                    });
+
+                    const finalStrChoice = minDPEntrada || valStrs[1] || valStrs[0]; // fallback heuristico
+                    console.log(`[C6Adapter] Chosen value string for minimum down payment: ${finalStrChoice}`);
+
+                    if (finalStrChoice) {
+                        const numericStr = finalStrChoice.replace(/[^\d,-]/g, '').replace(',', '.');
+                        extractedMinDownPayment = parseFloat(numericStr);
+                        if (extractedMinDownPayment >= 0) {
+                            console.log(`[C6Adapter] Minimum recommended down payment calculated: R$ ${extractedMinDownPayment}`);
+                            result.minDownPayment = extractedMinDownPayment;
+                            
+                            if (result.offers && result.offers.length > 0) {
+                                result.offers.forEach(o => {
+                                    (o as any).minDownPayment = extractedMinDownPayment;
+                                });
+                            }
+                        }
+                    }
+                    
+                    // Nao precisamos mais re-inserir o downPayment (a avaliacao/ofertas ja foi extraida)
+                }
+            } catch (e) {
+                console.log('[C6Adapter] ⚠️ Could not extract minimum down payment:', e);
             }
 
             return result;

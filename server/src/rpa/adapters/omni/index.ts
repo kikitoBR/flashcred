@@ -350,12 +350,13 @@ export class OmniAdapter implements BankAdapter {
                 interestRate: 0,
                 description: `${o.installments}x R$ ${o.monthlyPayment.toFixed(2)}`,
                 hasHighChance: false,
+                minDownPayment: minDownPaymentValue
             } as SimulationOffer));
 
             if (result.offers.length > 0) {
                 result.status = 'SUCCESS';
                 // Incluir entrada mínima no resultado
-                if (minDownPaymentValue) {
+                if (minDownPaymentValue !== undefined) {
                     result.minDownPayment = minDownPaymentValue;
                 }
                 console.log(`[OmniAdapter] ✅ ${result.offers.length} parcelas extraídas!`);
