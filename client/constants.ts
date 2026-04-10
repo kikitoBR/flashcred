@@ -2,15 +2,15 @@
 import { Bank, Client, Vehicle, BankCredential } from './types';
 
 export const BANKS: Bank[] = [
-  { id: '1', name: 'Banco Itaú', color: 'bg-orange-500', logoInitial: 'I' },
-  { id: '2', name: 'Bradesco Financiamentos', color: 'bg-red-600', logoInitial: 'B' },
-  { id: '3', name: 'Santander', color: 'bg-red-700', logoInitial: 'S' },
-  { id: '4', name: 'BV Financeira', color: 'bg-blue-500', logoInitial: 'V' },
-  { id: '5', name: 'Banco Pan', color: 'bg-cyan-500', logoInitial: 'P' },
-  { id: '6', name: 'C6 Bank', color: 'bg-slate-900', logoInitial: 'C' },
-  { id: '7', name: 'Banco Safra', color: 'bg-yellow-600', logoInitial: 'S' },
-  { id: '8', name: 'Daycoval', color: 'bg-indigo-600', logoInitial: 'D' },
-  { id: '9', name: 'Omni Financeira', color: 'bg-purple-600', logoInitial: 'OM' },
+  { id: '1', name: 'Banco Itaú', color: 'bg-orange-500', logoInitial: 'I', portalUrl: 'https://www.credlineitau.com.br' },
+  { id: '2', name: 'Bradesco Financiamentos', color: 'bg-red-600', logoInitial: 'B', portalUrl: 'https://turbo.bradesco/originacaolojista/login' },
+  { id: '3', name: 'Santander', color: 'bg-red-700', logoInitial: 'S', portalUrl: 'https://www.santander.com.br/portal/wps/script/templates/GCMRequest.do?page=5687' },
+  { id: '4', name: 'BV Financeira', color: 'bg-blue-500', logoInitial: 'V', portalUrl: 'https://www.bv.com.br/financiamento-de-veiculos' },
+  { id: '5', name: 'Banco Pan', color: 'bg-cyan-500', logoInitial: 'P', portalUrl: 'https://veiculos.bancopan.com.br/login' },
+  { id: '6', name: 'C6 Bank', color: 'bg-slate-900', logoInitial: 'C', portalUrl: 'https://c6auto.com.br/originacaolojista/login' },
+  { id: '7', name: 'Banco Safra', color: 'bg-yellow-600', logoInitial: 'S', portalUrl: 'https://financeira.safra.com.br/veiculos/login' },
+  { id: '8', name: 'Daycoval', color: 'bg-indigo-600', logoInitial: 'D', portalUrl: 'https://www.daycoval.com.br/financiamento-de-veiculos' },
+  { id: '9', name: 'Omni Financeira', color: 'bg-purple-600', logoInitial: 'OM', portalUrl: 'https://omni-mais.omni.com.br/login' },
 ];
 
 export const MOCK_CREDENTIALS: BankCredential[] = [

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-    CheckSquare, Square, PlayCircle, Zap, Loader2, TrendingUp, AlertCircle, CheckCircle2, PartyPopper, ChevronDown, Unplug, Info
+    CheckSquare, Square, PlayCircle, Zap, Loader2, TrendingUp, AlertCircle, CheckCircle2, PartyPopper, ChevronDown, Unplug, Info, ExternalLink
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Client, SimulationOffer, Vehicle, Bank } from '../types';
@@ -312,6 +312,13 @@ export const NewSimulation = () => {
             v.id === vehicle.id ? { ...v, status: 'SOLD' } : v
         ));
         setShowSuccessModal(true);
+    };
+
+    const handlePortalRedirect = (bankId: string) => {
+        const bank = BANKS.find(b => b.id === bankId);
+        if (bank?.portalUrl) {
+            window.open(bank.portalUrl, '_blank');
+        }
     };
 
     const getBestOffer = () => {
@@ -848,12 +855,13 @@ export const NewSimulation = () => {
                                                                 return (
                                                                     <div
                                                                         key={inst.months}
+                                                                        onClick={() => !isUnavailable && handlePortalRedirect(offer.bankId)}
                                                                         className={`p-3 rounded-lg border transition-all relative overflow-hidden group ${
                                                                             isUnavailable
                                                                                 ? 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
                                                                                 : inst.hasHighChance 
-                                                                                    ? 'bg-emerald-50/50 border-emerald-200 ring-1 ring-emerald-100' 
-                                                                                    : 'bg-white border-slate-100'
+                                                                                    ? 'bg-emerald-50/50 border-emerald-200 ring-1 ring-emerald-100 cursor-pointer hover:border-emerald-500 hover:shadow-md' 
+                                                                                    : 'bg-white border-slate-100 cursor-pointer hover:border-emerald-500 hover:shadow-md'
                                                                         }`}
                                                                     >
                                                                         {inst.hasHighChance && !isUnavailable && (
@@ -881,6 +889,12 @@ export const NewSimulation = () => {
                                                                                 <p className="text-[10px] text-slate-300">-</p>
                                                                             )}
                                                                         </div>
+                                                                        {!isUnavailable && (
+                                                                            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-200 transform translate-y-1 group-hover:translate-y-0 text-emerald-500 flex items-center gap-1">
+                                                                                <span className="text-[10px] font-bold">Portal</span>
+                                                                                <ExternalLink size={12} strokeWidth={3} />
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 );
                                                             })}

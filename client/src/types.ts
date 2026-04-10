@@ -50,6 +50,7 @@ export interface Bank {
     name: string;
     color: string;
     logoInitial: string;
+    portalUrl?: string;
 }
 
 export interface Sale {

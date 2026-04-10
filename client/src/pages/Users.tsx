@@ -28,7 +28,8 @@ export const Users = () => {
   };
 
   const getApiUrl = (path: string) => {
-    const isLocalhost = window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
+    const host = window.location.hostname;
+    const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
     return isLocalhost ? `http://localhost:3001${path}` : path;
   };
 
