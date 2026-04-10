@@ -93,9 +93,11 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
     let browser;
     let rpaResults: any[] = [];
 
+    const isHeadless = process.env.RPA_HEADLESS === 'true';
+
     if (rpaBanks.length > 0) {
         browser = await chromium.launch({
-            headless: false,
+            headless: isHeadless,
             args: [
                 '--start-maximized',
                 '--no-sandbox',
@@ -103,13 +105,19 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                 '--disable-blink-features=AutomationControlled',
                 '--disable-infobars',
                 '--disable-gpu',
-                '--disable-dev-shm-usage'
+                '--disable-dev-shm-usage',
+                '--js-flags="--max-old-space-size=512"' // Limit memory per tab
             ]
         });
 
         try {
-            // Create parallel promises for each RPA bank
-            const rpaPromises = rpaBanks.map(async (bank) => {
+            // Create parallel promises for each RPA bank with a small stagger
+            const rpaPromises = rpaBanks.map(async (bank, index) => {
+                // Wait a small amount (2s per bank) to stagger the CPU load spike
+                if (index > 0) {
+                    await new Promise(resolve => setTimeout(resolve, index * 2000));
+                }
+
                 const internalBankId = BANK_ID_MAP[bank];
                 console.log(`[Orchestrator] 🚀 Launching parallel simulation for ${internalBankId} (${bank})`);
 
