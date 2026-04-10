@@ -150,6 +150,20 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                 });
                 const page = await context.newPage();
 
+                // Anti-bot detection for ALL banks (centralized)
+                await page.addInitScript(() => {
+                    // Hide webdriver flag
+                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                    // Fake Chrome runtime
+                    (window as any).chrome = { runtime: {} };
+                    // Override permissions API
+                    const originalQuery = window.navigator.permissions.query;
+                    window.navigator.permissions.query = (parameters: any) =>
+                        parameters.name === 'notifications'
+                            ? Promise.resolve({ state: Notification.permission } as PermissionStatus)
+                            : originalQuery(parameters);
+                });
+
                 // Set generous timeouts for VPS parallel execution
                 page.setDefaultTimeout(60000);
                 page.setDefaultNavigationTimeout(90000);
