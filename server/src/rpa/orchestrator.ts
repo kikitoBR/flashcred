@@ -95,8 +95,14 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
 
     if (rpaBanks.length > 0) {
         browser = await chromium.launch({
-            headless: true,
-            args: ['--start-maximized']
+            headless: false,
+            args: [
+                '--start-maximized',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-infobars'
+            ]
         });
 
         try {
