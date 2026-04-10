@@ -54,11 +54,12 @@ router.get('/opportunities', async (req, res: any) => {
 
         // Remarketing: Approved simulations from > 5 minutes ago that DO NOT have a finalized sale
         let remarketingSql = `SELECT s.id, s.client_name as name, s.vehicle_description as car, s.created_at as date, s.status, 
-                    s.client_cpf as cpf, 'N/A' as phone, 0 as income, 'N/A' as email
+                    s.client_cpf as cpf, COALESCE(c.phone, 'N/A') as phone, COALESCE(c.income, 0) as income, COALESCE(c.email, 'N/A') as email
              FROM simulations s
+             LEFT JOIN clients c ON s.client_cpf = c.cpf AND s.tenant_id = c.tenant_id
              WHERE s.tenant_id = ? 
                AND s.status = 'APPROVED' 
-               AND s.created_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+               AND s.created_at < DATE_SUB(NOW(), INTERVAL 2 MINUTE)
                AND NOT EXISTS (
                    SELECT 1 FROM sales sa 
                    WHERE sa.tenant_id = s.tenant_id 
@@ -67,28 +68,49 @@ router.get('/opportunities', async (req, res: any) => {
                )`;
         let remarketingParams: any[] = [tenantId];
 
-        // Retry: Rejected simulations from > 10 minutes ago
-        let retrySql = `SELECT id, client_name as name, vehicle_description as car, created_at as date, 
-                    client_cpf as cpf, 'N/A' as phone, 0 as income, 'N/A' as email
-             FROM simulations 
-             WHERE tenant_id = ? AND status LIKE 'REJECT%' AND created_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)`;
+        // Retry: Rejected simulations - appear immediately
+        let retrySql = `SELECT s.id, s.client_name as name, s.vehicle_description as car, s.created_at as date, 
+                    s.client_cpf as cpf, COALESCE(c.phone, 'N/A') as phone, COALESCE(c.income, 0) as income, COALESCE(c.email, 'N/A') as email
+             FROM simulations s
+             LEFT JOIN clients c ON s.client_cpf = c.cpf AND s.tenant_id = c.tenant_id
+             WHERE s.tenant_id = ? AND s.status LIKE 'REJECT%'`;
         let retryParams: any[] = [tenantId];
 
         if (req.user?.role === 'vendedor') {
             const userId = req.user?.id;
             remarketingSql += ' AND s.user_id = ? ';
             remarketingParams.push(userId);
-            retrySql += ' AND user_id = ? ';
+            retrySql += ' AND s.user_id = ? ';
             retryParams.push(userId);
         }
 
-        remarketingSql += ' LIMIT 50';
-        retrySql += ' LIMIT 50';
+        remarketingSql += ' ORDER BY s.created_at DESC LIMIT 150';
+        retrySql += ' ORDER BY s.created_at DESC LIMIT 150';
 
-        const remarketing = await query(remarketingSql, remarketingParams);
-        const retry = await query(retrySql, retryParams);
+        const remarketing = await query(remarketingSql, remarketingParams) as any[];
+        const retry = await query(retrySql, retryParams) as any[];
 
-        res.json({ remarketing, retry });
+        // Helper to remove duplicate clients (so they don't appear 10 times in a row)
+        // Keeps the first instance found, which since we ORDER BY DESC, is the most recent attempt.
+        const filterDuplicates = (list: any[]) => {
+            const seen = new Set();
+            const result = [];
+            for (const item of list) {
+                const key = item.cpf ? item.cpf.replace(/\D/g, '') : (item.name || '').trim().toLowerCase();
+                if (!key) {
+                    result.push(item);
+                } else if (!seen.has(key)) {
+                    seen.add(key);
+                    result.push(item);
+                }
+            }
+            return result.slice(0, 50); // limit to 50 unique after filtering
+        };
+
+        res.json({ 
+            remarketing: filterDuplicates(remarketing), 
+            retry: filterDuplicates(retry) 
+        });
     } catch (error) {
         console.error('Error fetching opportunities:', error);
         res.status(500).json({ error: 'Failed to fetch opportunities' });
@@ -133,11 +155,11 @@ router.get('/stats', async (req, res: any) => {
             queryParams
         ) as any[];
 
-        // Monthly Performance (last 5 months sales)
+        // Monthly Performance (last 6 months sales)
         const monthlyData = await query(
             `SELECT DATE_FORMAT(sale_date, '%b') as name, SUM(financed_value) as value 
              FROM sales 
-             WHERE tenant_id = ? AND sale_date >= DATE_SUB(NOW(), INTERVAL 5 MONTH)${userIdFilter}
+             WHERE tenant_id = ? AND sale_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)${userIdFilter}
              GROUP BY DATE_FORMAT(sale_date, '%Y-%m'), DATE_FORMAT(sale_date, '%b')
              ORDER BY DATE_FORMAT(sale_date, '%Y-%m')`,
             queryParams
@@ -218,7 +240,58 @@ router.get('/stats', async (req, res: any) => {
     }
 });
 
-// POST /api/sales - Create a new sale
+// POST /api/sales/from-simulation - Create sale linked to a simulation
+router.post('/from-simulation', async (req, res: any) => {
+    try {
+        const tenantId = req.tenant.id;
+        const userId = req.user?.id;
+        const {
+            simulationId, bankId, bankName, installments,
+            monthlyPayment, interestRate, downPayment,
+            financedValue, saleDate
+        } = req.body;
+
+        if (!simulationId) {
+            return res.status(400).json({ error: 'simulationId é obrigatório' });
+        }
+
+        // Fetch the original simulation to get client + vehicle data
+        const simRows = await query(
+            `SELECT * FROM simulations WHERE id = ? AND tenant_id = ?`,
+            [simulationId, tenantId]
+        ) as any[];
+
+        if (simRows.length === 0) {
+            return res.status(404).json({ error: 'Simulação não encontrada' });
+        }
+
+        const sim = simRows[0];
+        const id = uuidv4();
+
+        await query(
+            `INSERT INTO sales (id, tenant_id, user_id, simulation_id, client_id, client_name, client_cpf, 
+             vehicle_id, vehicle_description, bank_id, bank_name, financed_value, down_payment, 
+             installments, monthly_payment, interest_rate, status, sale_date)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FINALIZED', ?)`,
+            [
+                id, tenantId, userId, simulationId,
+                sim.client_id, sim.client_name, sim.client_cpf,
+                sim.vehicle_id, sim.vehicle_description,
+                bankId, bankName,
+                financedValue || 0, downPayment || 0,
+                installments || 48, monthlyPayment || 0, interestRate || 0,
+                saleDate || new Date()
+            ]
+        );
+
+        res.status(201).json({ id, message: 'Venda registrada com sucesso!' });
+    } catch (error) {
+        console.error('Error creating sale from simulation:', error);
+        res.status(500).json({ error: 'Failed to create sale from simulation' });
+    }
+});
+
+// POST /api/sales - Create a new sale (manual)
 router.post('/', async (req, res: any) => {
     try {
         const tenantId = req.tenant.id;

@@ -56,6 +56,15 @@ export const salesService = {
         });
         if (!response.ok) throw new Error('Failed to log simulation');
         return response.json();
+    },
+    createFromSimulation: async (data: any) => {
+        const response = await fetch(`${API_URL}/sales/from-simulation`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) throw new Error('Failed to create sale from simulation');
+        return response.json();
     }
 };
 

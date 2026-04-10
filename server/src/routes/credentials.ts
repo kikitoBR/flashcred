@@ -102,7 +102,7 @@ router.put('/:bankId', async (req, res: any) => {
         if (existing.length > 0) {
             // Update
             await query(
-                `UPDATE bank_credentials SET login = ?, password = ? WHERE tenant_id = ? AND bank_id = ? AND user_id = ?`,
+                `UPDATE bank_credentials SET login = ?, password = ?, last_updated = CURRENT_TIMESTAMP WHERE tenant_id = ? AND bank_id = ? AND user_id = ?`,
                 [login, finalPasswordEnc, tenantId, bankId, userId]
             );
         } else {

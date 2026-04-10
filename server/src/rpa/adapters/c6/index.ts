@@ -125,6 +125,23 @@ export class C6Adapter implements BankAdapter {
             await page.locator('input[formcontrolname="numeroDocumento"]').fill(cleanCpf);
             await page.locator('input[formcontrolname="celular"]').fill(cleanPhone);
             await page.locator('input[formcontrolname="dataDeNascimento"]').fill(birthDate);
+            await page.keyboard.press('Tab');
+            await page.waitForTimeout(1000);
+
+            try {
+                const ageError = page.locator('mat-error:has-text("Ops, cliente precisa ter no máximo 75 anos.")').first();
+                if (await ageError.isVisible({ timeout: 2000 })) {
+                    console.log('[C6Adapter] ❌ Erro de idade máxima detectado!');
+                    return {
+                        bankId: this.id,
+                        status: 'ERROR',
+                        message: 'Ops, cliente precisa ter no máximo 75 anos.',
+                        offers: []
+                    };
+                }
+            } catch (e) {
+                // Ignore se não aparecer
+            }
 
             // UF de Licenciamento (mat-select)
             console.log(`[C6Adapter] → Seclecting UF: ${input.vehicle.uf}`);

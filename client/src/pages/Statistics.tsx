@@ -3,7 +3,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     History, Search, ArrowUpDown, ArrowUp, ArrowDown, Zap, PhoneCall, RefreshCw,
-    User, Phone, Mail, Car, PlayCircle, Printer, TrendingUp, FileText, MessageCircle, Eye
+    User, Phone, Mail, Car, PlayCircle, Printer, TrendingUp, FileText, MessageCircle, Eye,
+    CheckCircle2, DollarSign, Building2, Loader2
 } from 'lucide-react';
 import {
     ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip,
@@ -26,6 +27,22 @@ export const Statistics = () => {
     // Modal for Simulation Details
     const [isSimModalOpen, setIsSimModalOpen] = useState(false);
     const [selectedSimulation, setSelectedSimulation] = useState<any>(null);
+
+    // Modal for Sale Registration (Efetivar Venda)
+    const [isSaleModalOpen, setIsSaleModalOpen] = useState(false);
+    const [saleSimulation, setSaleSimulation] = useState<any>(null);
+    const [selectedSaleBank, setSelectedSaleBank] = useState('');
+    const [selectedSaleInstallment, setSelectedSaleInstallment] = useState<any>(null);
+    const [saleDownPayment, setSaleDownPayment] = useState('');
+    const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
+    const [isSaleSubmitting, setIsSaleSubmitting] = useState(false);
+
+    // In-app notification (replaces browser alert)
+    const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+    const showNotification = (type: 'success' | 'error', message: string) => {
+        setNotification({ type, message });
+        setTimeout(() => setNotification(null), 4000);
+    };
 
     // State for History Table
     const [historySearch, setHistorySearch] = useState('');
@@ -244,6 +261,64 @@ export const Statistics = () => {
         return res;
     };
 
+    const translateStatus = (status: string) => {
+        if (!status) return '-';
+        const s = status.toUpperCase();
+        if (s === 'APPROVED') return 'Aprovado';
+        if (s.includes('REJECT')) return 'Reprovado';
+        if (s === 'PENDING') return 'Em Análise';
+        if (s === 'ERROR') return 'Erro';
+        return status;
+    };
+
+    // --- SALE FROM SIMULATION ---
+    const handleOpenSaleModal = (simulation: any) => {
+        setSaleSimulation(simulation);
+        setSelectedSaleBank('');
+        setSelectedSaleInstallment(null);
+        setSaleDownPayment('');
+        setSaleDate(new Date().toISOString().split('T')[0]);
+        setIsSaleModalOpen(true);
+    };
+
+    const approvedOffersForSale = useMemo(() => {
+        if (!saleSimulation?.resultData?.offers) return [];
+        return saleSimulation.resultData.offers.filter((o: any) => o.status === 'APPROVED');
+    }, [saleSimulation]);
+
+    const selectedBankOffer = useMemo(() => {
+        return approvedOffersForSale.find((o: any) => o.bankId === selectedSaleBank);
+    }, [approvedOffersForSale, selectedSaleBank]);
+
+    const handleConfirmSale = async () => {
+        if (!saleSimulation || !selectedSaleBank || !selectedSaleInstallment) return;
+        const bankObj = BANKS.find((b: any) => b.id === selectedSaleBank);
+        try {
+            setIsSaleSubmitting(true);
+            const vehiclePrice = selectedSaleInstallment.value * selectedSaleInstallment.months; // rough estimate
+            const dp = Number(saleDownPayment) || 0;
+            await salesService.createFromSimulation({
+                simulationId: saleSimulation.id,
+                bankId: selectedSaleBank,
+                bankName: bankObj?.name || selectedSaleBank,
+                installments: selectedSaleInstallment.months,
+                monthlyPayment: selectedSaleInstallment.value,
+                interestRate: selectedSaleInstallment.interestRate || 0,
+                downPayment: dp,
+                financedValue: selectedSaleInstallment.value * selectedSaleInstallment.months,
+                saleDate: saleDate
+            });
+            setIsSaleModalOpen(false);
+            showNotification('success', 'Venda registrada com sucesso!');
+            fetchData(); // Refresh data
+        } catch (error) {
+            console.error('Error creating sale:', error);
+            showNotification('error', 'Erro ao registrar venda. Tente novamente.');
+        } finally {
+            setIsSaleSubmitting(false);
+        }
+    };
+
     // --- PDF REPORT DATA GENERATION ---
     const reportHistory = useMemo(() => {
         return simulationHistory.filter(item => {
@@ -261,6 +336,29 @@ export const Statistics = () => {
 
     return (
         <div className="pb-20 p-6">
+            {/* In-app Notification Toast */}
+            {notification && (
+                <div className={`fixed top-6 right-6 z-[100] flex items-center gap-3 px-5 py-4 rounded-xl shadow-2xl border animate-fade-in transition-all duration-300 ${
+                    notification.type === 'success' 
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                        : 'bg-red-50 border-red-200 text-red-800'
+                }`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        notification.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'
+                    }`}>
+                        {notification.type === 'success' 
+                            ? <CheckCircle2 className="w-4 h-4 text-white" />
+                            : <History className="w-4 h-4 text-white" />
+                        }
+                    </div>
+                    <div>
+                        <p className="font-bold text-sm">{notification.type === 'success' ? 'Sucesso!' : 'Erro'}</p>
+                        <p className="text-xs opacity-80">{notification.message}</p>
+                    </div>
+                    <button onClick={() => setNotification(null)} className="ml-4 opacity-50 hover:opacity-100 text-lg">&times;</button>
+                </div>
+            )}
+
             {/* NORMAL SCREEN VIEW */}
             <div className="space-y-8 animate-fade-in print:hidden">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -430,21 +528,32 @@ export const Statistics = () => {
                                             <td className="px-6 py-4 text-slate-600">{item.vehicle}</td>
                                             <td className="px-6 py-4">
                                                 <Badge variant={item.status === 'APPROVED' ? 'success' : item.status.includes('REJECT') ? 'danger' : 'warning'}>
-                                                    {item.status}
+                                                    {translateStatus(item.status)}
                                                 </Badge>
                                             </td>
                                             <td className="px-6 py-4 text-slate-600">{item.bank}</td>
                                             <td className="px-6 py-4">
-                                                <button
-                                                    title="Ver Detalhes"
-                                                    onClick={() => {
-                                                        setSelectedSimulation(item);
-                                                        setIsSimModalOpen(true);
-                                                    }}
-                                                    className="p-2 flex items-center justify-center bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-all duration-200 border border-emerald-500 shadow-sm"
-                                                >
-                                                    <Search className="w-4 h-4 stroke-[2.5]" />
-                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        title="Ver Detalhes"
+                                                        onClick={() => {
+                                                            setSelectedSimulation(item);
+                                                            setIsSimModalOpen(true);
+                                                        }}
+                                                        className="p-2 flex items-center justify-center bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-all duration-200 border border-emerald-500 shadow-sm"
+                                                    >
+                                                        <Search className="w-4 h-4 stroke-[2.5]" />
+                                                    </button>
+                                                    {item.status === 'APPROVED' && (
+                                                        <button
+                                                            title="Efetivar Venda"
+                                                            onClick={() => handleOpenSaleModal(item)}
+                                                            className="p-2 flex items-center justify-center bg-amber-500 text-white hover:bg-amber-600 rounded-lg transition-all duration-200 border border-amber-400 shadow-sm"
+                                                        >
+                                                            <DollarSign className="w-4 h-4 stroke-[2.5]" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -722,7 +831,7 @@ export const Statistics = () => {
                                     <td className="px-3 py-2">{item.vehicle}</td>
                                     <td className="px-3 py-2">{item.bank}</td>
                                     <td className="px-3 py-2 font-medium">
-                                        {item.status}
+                                        {translateStatus(item.status)}
                                     </td>
                                 </tr>
                             ))}
@@ -751,6 +860,21 @@ export const Statistics = () => {
                                         </div>
                                         <Badge variant={offer.status === 'APPROVED' ? 'success' : 'danger'}>{offer.status === 'APPROVED' ? 'Pré-Aprovado' : 'Proposta Recusada'}</Badge>
                                     </div>
+                                    
+                                    {offer.status === 'APPROVED' && offer.minDownPayment != null && offer.minDownPayment >= 0 && (
+                                        <div className={`mb-3 flex items-center gap-2 border rounded-lg px-3 py-2 ${offer.minDownPayment === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                                            <span className="text-sm">{offer.minDownPayment === 0 ? '🎉' : '💰'}</span>
+                                            <span className={`text-sm font-medium ${offer.minDownPayment === 0 ? 'text-emerald-800' : 'text-amber-800'}`}>
+                                                Entrada mínima:{' '}
+                                                {offer.minDownPayment === 0 ? (
+                                                    <strong className="text-emerald-700">R$ 0,00 (100% Financiado)</strong>
+                                                ) : (
+                                                    <strong className="text-amber-900">R$ {offer.minDownPayment.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                                                )}
+                                            </span>
+                                        </div>
+                                    )}
+
                                     {offer.status === 'APPROVED' && offer.installments && (
                                         <div className="grid grid-cols-2 gap-2 mt-3">
                                             {offer.installments.map((inst: any, i: number) => (
@@ -782,6 +906,161 @@ export const Statistics = () => {
                         <p className="text-sm text-slate-500 max-w-xs">
                             Os resultados desta simulação não foram armazenados no banco de dados, ou falharam durante o cálculo.
                         </p>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Sale Registration Modal (Efetivar Venda) */}
+            <Modal isOpen={isSaleModalOpen} onClose={() => setIsSaleModalOpen(false)} title="Efetivar Venda" className="max-w-lg">
+                {saleSimulation && (
+                    <div className="space-y-5">
+                        {/* Client & Vehicle Info (readonly) */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Cliente</p>
+                                <div className="flex items-center gap-2">
+                                    <User className="w-4 h-4 text-slate-400" />
+                                    <span className="text-sm font-semibold text-slate-800 truncate">{saleSimulation.client}</span>
+                                </div>
+                            </div>
+                            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Veículo</p>
+                                <div className="flex items-center gap-2">
+                                    <Car className="w-4 h-4 text-slate-400" />
+                                    <span className="text-sm font-semibold text-slate-800 truncate">{saleSimulation.vehicle}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Bank Selection */}
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                                <Building2 className="w-3.5 h-3.5 inline mr-1" />
+                                Banco Aprovado
+                            </label>
+                            {approvedOffersForSale.length === 0 ? (
+                                <p className="text-sm text-slate-500 italic">Nenhum banco aprovado encontrado nesta simulação.</p>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-2">
+                                    {approvedOffersForSale.map((offer: any) => {
+                                        const bank = BANKS.find((b: any) => b.id === offer.bankId);
+                                        const isSelected = selectedSaleBank === offer.bankId;
+                                        return (
+                                            <button
+                                                key={offer.bankId}
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedSaleBank(offer.bankId);
+                                                    setSelectedSaleInstallment(null);
+                                                }}
+                                                className={`p-3 rounded-xl border-2 text-left transition-all duration-200 ${isSelected
+                                                    ? 'border-emerald-500 bg-emerald-50 shadow-md shadow-emerald-100'
+                                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs ${bank?.color || 'bg-slate-400'}`}>
+                                                        {bank?.logoInitial || '?'}
+                                                    </div>
+                                                    <span className="text-sm font-semibold text-slate-800">{bank?.name || offer.bankId}</span>
+                                                </div>
+                                                {isSelected && <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-1 ml-auto" />}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Installment Selection */}
+                        {selectedBankOffer?.installments && (
+                            <div className="animate-fade-in">
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                                    <DollarSign className="w-3.5 h-3.5 inline mr-1" />
+                                    Plano de Parcelas
+                                </label>
+                                <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-1">
+                                    {selectedBankOffer.installments.map((inst: any, idx: number) => {
+                                        const isSelected = selectedSaleInstallment?.months === inst.months && selectedSaleInstallment?.value === inst.value;
+                                        return (
+                                            <button
+                                                key={idx}
+                                                type="button"
+                                                onClick={() => setSelectedSaleInstallment(inst)}
+                                                className={`p-3 rounded-lg border-2 flex justify-between items-center transition-all duration-200 ${isSelected
+                                                    ? 'border-emerald-500 bg-emerald-50 shadow-sm'
+                                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                                                    }`}
+                                            >
+                                                <span className="font-bold text-slate-700">{inst.months}x</span>
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-emerald-600 font-bold text-sm">
+                                                        R$ {inst.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                    </span>
+                                                    {inst.interestRate ? (
+                                                        <span className="text-[10px] text-slate-400">{inst.interestRate.toFixed(2)}% a.m.</span>
+                                                    ) : null}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Down Payment & Date */}
+                        {selectedSaleInstallment && (
+                            <div className="grid grid-cols-2 gap-4 animate-fade-in">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Entrada (R$)</label>
+                                    <input
+                                        type="number"
+                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        value={saleDownPayment}
+                                        onChange={(e) => setSaleDownPayment(e.target.value)}
+                                        placeholder="0,00"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Data da Venda</label>
+                                    <input
+                                        type="date"
+                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        value={saleDate}
+                                        onChange={(e) => setSaleDate(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Summary & Confirm */}
+                        {selectedSaleInstallment && (
+                            <div className="bg-gradient-to-r from-emerald-50 to-emerald-100/50 p-4 rounded-xl border border-emerald-200 animate-fade-in">
+                                <h4 className="text-xs font-bold text-emerald-700 uppercase mb-2">Resumo da Venda</h4>
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                    <span className="text-slate-600">Banco:</span>
+                                    <span className="font-semibold text-slate-800">{BANKS.find((b: any) => b.id === selectedSaleBank)?.name}</span>
+                                    <span className="text-slate-600">Parcelas:</span>
+                                    <span className="font-semibold text-slate-800">{selectedSaleInstallment.months}x de R$ {selectedSaleInstallment.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                    <span className="text-slate-600">Entrada:</span>
+                                    <span className="font-semibold text-slate-800">R$ {(Number(saleDownPayment) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                    <span className="text-slate-600">Data:</span>
+                                    <span className="font-semibold text-slate-800">{formatDate(saleDate)}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                            <Button variant="ghost" onClick={() => setIsSaleModalOpen(false)}>Cancelar</Button>
+                            <Button
+                                variant="success"
+                                disabled={!selectedSaleBank || !selectedSaleInstallment || isSaleSubmitting}
+                                onClick={handleConfirmSale}
+                                icon={isSaleSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                            >
+                                {isSaleSubmitting ? 'Registrando...' : 'Confirmar Venda'}
+                            </Button>
+                        </div>
                     </div>
                 )}
             </Modal>

@@ -187,20 +187,42 @@ export class SafraAdapter implements BankAdapter {
             await page.keyboard.press('Tab');
             await page.waitForTimeout(1000);
 
+            try {
+                const avalistaSection = page.locator('cdf-dados-cliente-avalista, h2:has-text("Dados do Avalista")').first();
+                if (await avalistaSection.isVisible({ timeout: 2000 })) {
+                    console.log('[SafraAdapter] ❌ Solicitação de avalista detectada!');
+                    return {
+                        bankId: this.id,
+                        status: 'ERROR',
+                        message: 'Dados do avalista solicitado, por favor, continue no site oficial.',
+                        offers: []
+                    };
+                }
+            } catch (e) {
+                // Ignore se não aparecer
+            }
+
             // ── Step 3: Fill CEP ──
-            console.log('[SafraAdapter] Step 3: Filling CEP...');
-            const cepField = page.locator('input[placeholder="CEP"]');
-            await cepField.waitFor({ state: 'visible', timeout: 10000 });
-            await cepField.click();
-            await cepField.fill('');
-            const cepClean = (input.client.zipCode || '20040020').replace(/\D/g, ''); // Usa o CEP do cliente ou um padrão
-            await page.keyboard.type(cepClean, { delay: 50 });
-            await page.keyboard.press('Tab');
-            await page.waitForTimeout(1000);
+            console.log('[SafraAdapter] Step 3: Checking if CEP is required...');
+            const cepField = page.locator('input[placeholder="CEP"], #cdf-input_607');
+            try {
+                if (await cepField.isVisible({ timeout: 5000 })) {
+                    await cepField.click();
+                    await cepField.fill('');
+                    const cepClean = (input.client.zipCode || '20040020').replace(/\D/g, ''); // Usa o CEP do cliente ou um padrão
+                    await page.keyboard.type(cepClean, { delay: 50 });
+                    await page.keyboard.press('Tab');
+                    await page.waitForTimeout(1000);
+                } else {
+                    console.log('[SafraAdapter] -> CEP field not displayed, skipping...');
+                }
+            } catch {
+                console.log('[SafraAdapter] -> Error checking CEP field, skipping...');
+            }
 
             // ── Step 4: Fill Celular ──
             console.log('[SafraAdapter] Step 4: Filling Celular...');
-            const phoneField = page.locator('input[placeholder="Celular"]');
+            const phoneField = page.locator('input[placeholder="Celular"], #cdf-input_624');
             await phoneField.waitFor({ state: 'visible', timeout: 10000 });
             await phoneField.click();
             await phoneField.fill('');
@@ -240,8 +262,10 @@ export class SafraAdapter implements BankAdapter {
             await plateField.fill('');
             await page.keyboard.type(input.vehicle.plate.replace(/[^a-zA-Z0-9]/g, ''), { delay: 50 });
             await page.keyboard.press('Tab');
+            console.log('[SafraAdapter] → Waiting 2 seconds for plate consultation...');
+            await page.waitForTimeout(2000); // 2 second delay for plate consultation
             console.log('[SafraAdapter] → Waiting for version options to load...');
-            await page.waitForTimeout(5000);
+            await page.waitForTimeout(3000);
 
             // ── Step 8: Select Version (Intelligent Match) ──
             console.log('[SafraAdapter] Step 8: Selecting vehicle version...');
@@ -364,94 +388,110 @@ export class SafraAdapter implements BankAdapter {
             await this.clickRecalcular(page);
             await page.waitForTimeout(8000); // Wait for the first recalculation
 
-            // ── Step 14: Loop through installment plans ──
-            const installmentMonths = [60, 48, 42, 36, 30, 24, 18];
-            const offers: SimulationOffer[] = [];
-
-            for (let i = 0; i < installmentMonths.length; i++) {
-                const months = installmentMonths[i];
-                console.log(`[SafraAdapter] Step 14.${i + 1}: Collecting installment ${months}x...`);
-
-                try {
-                    // Clica via JS direto na DOM na pílula do mês específico (e.g. "60x")
-                    const clickedMonth = await page.evaluate((m) => {
-                        // 1) Novo layout: procura pela label ou input correspondente ao mês
-                        const labelItem = document.querySelector(`label[for="${m}"]`) as HTMLElement;
-                        if (labelItem) {
-                            labelItem.click();
-                            return true;
-                        }
-
-                        // 2) Fallback para layout antigo
-                        const allElements = Array.from(document.querySelectorAll('div, span, button'));
-                        // Achando a label que tem exatamente "60x", "48x", etc e pareça um boão clicável
-                        const btn = allElements.find(el => {
-                            const t = el.textContent?.replace(/\s+/g, ' ').trim();
-                            // Verifica texto exato e se elemento parece ser parte de um toggle group (classes comuns)
-                            return t === `${m}x` && (el.className.includes('btn') || el.className.includes('p-button') || el.closest('.installment-selector, .prazo-container, .btn-group') != null);
-                        }) as HTMLElement;
-
-                        if (btn) {
-                            btn.click();
-                            return true;
-                        }
-
-                        // Fallback pra achar em qq lugar
-                        const roughMatch = allElements.find(el => el.textContent?.trim() === `${m}x` && el.children.length === 0) as HTMLElement;
-                        if (roughMatch) {
-                            roughMatch.click();
-                            return true;
-                        }
-
-                        return false;
-                    }, months);
-
-                    if (!clickedMonth) {
-                        // Se não clicou pela DOM, tenta via Força Bruta do Playwright
-                        try {
-                            // Tenta o novo layout primário
-                            await page.locator(`label[for="${months}"]`).click({ force: true, timeout: 2000 });
-                        } catch {
-                            // Fallback
-                            await page.locator(`text="${months}x"`).first().click({ force: true, timeout: 2000 }).catch(() => { });
+            // ── Extract Minimum Down Payment (Entrada Mínima) ──
+            try {
+                // Procurando por um span com as classes indicadas que contenha R$
+                const minEntryElement = page.locator('span.text-xs.text-dimGray-500:has-text("R$")').first();
+                if (await minEntryElement.isVisible({ timeout: 2000 })) {
+                    const text = await minEntryElement.textContent();
+                    const matchVal = text?.match(/R\$\s*([\d.,]+)/i);
+                    if (matchVal) {
+                        const minEntryVal = parseFloat(matchVal[1].replace(/\./g, '').replace(',', '.'));
+                        if (minEntryVal > 0) {
+                            result.minimumDownPayment = minEntryVal;
+                            result.minDownPayment = minEntryVal;
+                            console.log(`[SafraAdapter] → Entrada Mínima Detectada: R$ ${minEntryVal.toFixed(2)}`);
                         }
                     }
-
-                    await page.waitForTimeout(1500); // Aguarda a troca de aba renderizar o valor
-
-                    // Click Recalcular if available - em alguns sistemas de financiamento, clicar no botão não é suficiente
-                    try {
-                        const clicked = await page.evaluate(() => {
-                            const btns = Array.from(document.querySelectorAll('button'));
-                            const btn = btns.find(b => b.textContent?.toLowerCase().includes('recalcular'));
-                            if (btn && !btn.hasAttribute('disabled')) {
-                                btn.click();
-                                return true;
-                            }
-                            return false;
-                        });
-
-                        if (clicked) {
-                            await page.waitForTimeout(5000); // Espera o safra refazer o request
-                        }
-                    } catch {
-                        // Ignore
-                    }
-
-                    // Aguarda mais um pouco para a estabilidade visual da rederização do card
-                    await page.waitForTimeout(1500);
-
-                    // Extract the installment value
-                    const offerData = await this.extractInstallmentValue(page, months);
-                    if (offerData) {
-                        offers.push(offerData);
-                        console.log(`[SafraAdapter] → ${months}x = R$ ${offerData.monthlyPayment.toFixed(2)} (taxa: ${offerData.interestRate}%)`);
-                    } else {
-                        console.log(`[SafraAdapter] → No valid installment data found for ${months}x.`);
-                    }
-                } catch (e: any) {
-                    console.warn(`[SafraAdapter] ⚠️ Error collecting ${months}x:`, e.message);
                 }
+            } catch (e) {
+                console.log('[SafraAdapter] -> Nenhuma entrada mínima encontrada na tela.');
+            }
+
+            // ── Step 14: Extract all installment plans at once ──
+            console.log('[SafraAdapter] Step 14: Extracting all installment plans at once...');
+            let offers: SimulationOffer[] = [];
+
+            try {
+                await page.waitForTimeout(2000);
+                const scrapedOffers = await page.evaluate(() => {
+                    const results: any[] = [];
+                    // Look for all swiper slides containing labels (new layout)
+                    const slides = Array.from(document.querySelectorAll('.swiper-slide label'));
+                    
+                    if (slides.length > 0) {
+                        for (const label of slides) {
+                            const textContent = label.textContent?.replace(/\s+/g, ' ').replace(/\u00A0/g, ' ').trim() || '';
+                            const parcelMatch = textContent.match(/(\d+)x\s*de/i);
+                            const valMatch = textContent.match(/R\$\s*([\d.,]+)/i);
+                            
+                            if (parcelMatch && valMatch) {
+                                const months = parseInt(parcelMatch[1], 10);
+                                const monthlyPayment = parseFloat(valMatch[1].replace(/\./g, '').replace(',', '.'));
+                                const hasHighChance = textContent.includes('Maior Chance') || textContent.includes('maior chance');
+                                
+                                results.push({ months, monthlyPayment, hasHighChance });
+                            }
+                        }
+                    }
+                    return results;
+                });
+
+                if (scrapedOffers && scrapedOffers.length > 0) {
+                    for (const offer of scrapedOffers) {
+                        offers.push({
+                            bankId: 'safra',
+                            installments: offer.months,
+                            monthlyPayment: offer.monthlyPayment,
+                            interestRate: 0,
+                            totalValue: offer.monthlyPayment * offer.months,
+                            hasHighChance: offer.hasHighChance
+                        });
+                        console.log(`[SafraAdapter] → ${offer.months}x = R$ ${offer.monthlyPayment.toFixed(2)} ${offer.hasHighChance ? '↑ Maior Chance' : ''}`);
+                    }
+                } else {
+                    console.log('[SafraAdapter] ⚠️ No offers found in a single pass. Falling back to iterative loop...');
+                    
+                    // FALLBACK ITERATIVE LOOP
+                    const installmentMonths = [60, 48, 42, 36, 30, 24, 18];
+                    for (let i = 0; i < installmentMonths.length; i++) {
+                        const months = installmentMonths[i];
+                        console.log(`[SafraAdapter] Step 14.${i + 1}: Collecting installment ${months}x...`);
+
+                        try {
+                            const clickedMonth = await page.evaluate((m) => {
+                                const labelItem = document.querySelector(`label[for="${m}"]`) as HTMLElement;
+                                if (labelItem) { labelItem.click(); return true; }
+                                const allElements = Array.from(document.querySelectorAll('div, span, button'));
+                                const btn = allElements.find(el => {
+                                    const t = el.textContent?.replace(/\s+/g, ' ').trim();
+                                    return t === `${m}x` && (el.className.includes('btn') || el.className.includes('p-button') || el.closest('.installment-selector, .prazo-container, .btn-group') != null);
+                                }) as HTMLElement;
+                                if (btn) { btn.click(); return true; }
+                                const roughMatch = allElements.find(el => el.textContent?.trim() === `${m}x` && el.children.length === 0) as HTMLElement;
+                                if (roughMatch) { roughMatch.click(); return true; }
+                                return false;
+                            }, months);
+
+                            if (!clickedMonth) {
+                                try { await page.locator(`label[for="${months}"]`).click({ force: true, timeout: 2000 }); } 
+                                catch { await page.locator(`text="${months}x"`).first().click({ force: true, timeout: 2000 }).catch(() => { }); }
+                            }
+
+                            await page.waitForTimeout(1500);
+
+                            const offerData = await this.extractInstallmentValue(page, months);
+                            if (offerData) {
+                                offers.push(offerData);
+                                console.log(`[SafraAdapter] → ${months}x = R$ ${offerData.monthlyPayment.toFixed(2)}`);
+                            }
+                        } catch (e: any) {
+                            console.warn(`[SafraAdapter] ⚠️ Error collecting ${months}x:`, e.message);
+                        }
+                    }
+                }
+            } catch (e: any) {
+                console.warn(`[SafraAdapter] ⚠️ Error collecting offers at once:`, e.message);
             }
 
             result.offers = offers;
@@ -536,6 +576,7 @@ export class SafraAdapter implements BankAdapter {
                 let monthlyPayment = 0;
                 let interestRate = 0;
                 let totalValue = 0;
+                let hasHighChance = false;
 
                 // 1) Novo layout swiper: tenta extrair direto do label específico (Ex: <label for="60">)
                 const labelItem = document.querySelector(`label[for="${m}"]`);
@@ -544,6 +585,9 @@ export class SafraAdapter implements BankAdapter {
                     const matchVal = textContent.match(/R\$\s*([\d.,]+)/i);
                     if (matchVal) {
                         monthlyPayment = parseFloat(matchVal[1].replace(/\./g, '').replace(',', '.'));
+                    }
+                    if (textContent.includes('Maior Chance')) {
+                        hasHighChance = true;
                     }
                 }
 
@@ -588,7 +632,7 @@ export class SafraAdapter implements BankAdapter {
                     }
                 }
 
-                return { monthlyPayment, interestRate, totalValue };
+                return { monthlyPayment, interestRate, totalValue, hasHighChance };
             }, months);
 
             if (data.monthlyPayment > 0) {
@@ -598,6 +642,7 @@ export class SafraAdapter implements BankAdapter {
                     monthlyPayment: data.monthlyPayment,
                     interestRate: data.interestRate,
                     totalValue: data.totalValue || data.monthlyPayment * months,
+                    hasHighChance: data.hasHighChance
                 };
             }
 

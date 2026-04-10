@@ -473,6 +473,7 @@ export const Clients = () => {
                                     label="CEP"
                                     value={formData.address?.zipCode || ''}
                                     onChange={(e: any) => setFormData({ ...formData, address: { ...formData.address, zipCode: e.target.value } })}
+                                    required
                                 />
                             </div>
                             <div className="col-span-2">

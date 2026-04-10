@@ -100,6 +100,21 @@ export class PanAdapter implements BankAdapter {
             }
             await page.waitForTimeout(1500);
 
+            try {
+                const notEligibleModal = page.locator('.modal-pre-analysis__title:has-text("CLIENTE NÃO ELEGÍVEL"), h2:has-text("CLIENTE NÃO ELEGÍVEL")').first();
+                if (await notEligibleModal.isVisible({ timeout: 2000 })) {
+                    console.log('[PanAdapter] ❌ Modal de Cliente Não Elegível detectado!');
+                    return {
+                        bankId: this.id,
+                        status: 'ERROR',
+                        message: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.',
+                        offers: []
+                    };
+                }
+            } catch (e) {
+                // Ignore se não aparecer
+            }
+
             // Step 2: Fill phone
             console.log('[PanAdapter] Step 2: Filling phone...');
             const phoneField = page.locator('input[formcontrolname="cellNumber"]');

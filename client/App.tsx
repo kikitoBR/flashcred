@@ -48,7 +48,7 @@ const Layout = () => {
   ];
 
   if (user?.role === 'vendedor') {
-    menuItems = menuItems.filter(i => !['Usuários', 'Vendas'].includes(i.label));
+    menuItems = menuItems.filter(i => !['Usuários'].includes(i.label));
   } else if (user?.role === 'gerente') {
     menuItems = menuItems.filter(i => !['Usuários'].includes(i.label));
   }

@@ -268,6 +268,25 @@ export const NewSimulation = () => {
 
         // Save simulation to history
         try {
+            let finalStatus = 'ERROR';
+            if (results.some(r => r.status === 'APPROVED')) {
+                finalStatus = 'APPROVED';
+            } else if (results.some(r => {
+                if (r.status === 'REJECTED') {
+                    const reasonLower = (r.reason || '').toLowerCase();
+                    if (reasonLower.includes('usuário') || reasonLower.includes('senha') || 
+                        reasonLower.includes('falha geral') || reasonLower.includes('timeout') ||
+                        reasonLower.includes('credencial') || reasonLower.includes('integração')) {
+                        return false; // Technical or config error masquerading as REJECTED
+                    }
+                    return true; // Actual credit rejection
+                }
+                 // If status is specifically 'ERROR'
+                return false;
+            })) {
+                finalStatus = 'REJECTED';
+            }
+
             await salesService.logSimulation({
                 clientId: client.id,
                 clientName: client.name,
@@ -276,7 +295,7 @@ export const NewSimulation = () => {
                 vehicleDescription: `${vehicle.brand} ${vehicle.model} - ${vehicle.plate}`.trim(),
                 bankId: 'MULTIBANK',
                 bankName: 'Múltiplos Bancos',
-                status: results.some(r => r.status === 'APPROVED') ? 'APPROVED' : 'REJECTED',
+                status: finalStatus,
                 resultData: { offers: results }
             });
         } catch (error) {
@@ -829,13 +848,12 @@ export const NewSimulation = () => {
                                                                 return (
                                                                     <div
                                                                         key={inst.months}
-                                                                        onClick={() => !isUnavailable && handleFinalizeSale(offer)}
                                                                         className={`p-3 rounded-lg border transition-all relative overflow-hidden group ${
                                                                             isUnavailable
                                                                                 ? 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
                                                                                 : inst.hasHighChance 
-                                                                                    ? 'bg-emerald-50/50 border-emerald-200 ring-1 ring-emerald-100 cursor-pointer hover:border-emerald-500' 
-                                                                                    : 'bg-white border-slate-100 cursor-pointer hover:border-emerald-500'
+                                                                                    ? 'bg-emerald-50/50 border-emerald-200 ring-1 ring-emerald-100' 
+                                                                                    : 'bg-white border-slate-100'
                                                                         }`}
                                                                     >
                                                                         {inst.hasHighChance && !isUnavailable && (
@@ -863,13 +881,6 @@ export const NewSimulation = () => {
                                                                                 <p className="text-[10px] text-slate-300">-</p>
                                                                             )}
                                                                         </div>
-                                                                        {!isUnavailable && (
-                                                                            <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-2 right-2">
-                                                                                <div className="bg-emerald-500 text-white p-1 rounded-full shadow-sm">
-                                                                                    <CheckCircle2 size={12} />
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
                                                                     </div>
                                                                 );
                                                             })}

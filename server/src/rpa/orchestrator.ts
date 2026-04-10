@@ -110,7 +110,7 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                 const adapter = createAdapter(internalBankId);
                 if (!adapter) {
                     console.warn(`[Orchestrator] No adapter for ${internalBankId}`);
-                    return { bankId: bank, status: 'REJECTED', reason: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.' };
+                    return { bankId: bank, status: 'ERROR', reason: 'Integração não disponível para este banco.' };
                 }
 
                 // Fetch credentials using original frontend ID to match DB
@@ -125,7 +125,7 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                 const credentials = await credentialService.getCredentials(bank, tenantId, userId);
                 if (!credentials) {
                     console.error(`[Orchestrator] No credentials for ${bank}`);
-                    return { bankId: bank, status: 'REJECTED', reason: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.' };
+                    return { bankId: bank, status: 'ERROR', reason: 'Credencial não definida: Por favor, configure os dados de acesso no painel de credenciais.' };
                 }
 
                 // Each bank gets its own browser context (isolated session)
@@ -175,7 +175,7 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                         return {
                             bankId: bank,
                             status: 'REJECTED',
-                            reason: simulationResult.message || 'Cliente não aprovado: Não temos condições aprováveis para este cliente.'
+                            reason: simulationResult.message || 'Proposta não aprovada na política do banco.'
                         };
                     }
                 } catch (error: any) {
@@ -189,7 +189,7 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                     ) {
                         return { bankId: bank, status: 'REJECTED', reason: 'Usuário e/ou senha inválido(s)' };
                     }
-                    return { bankId: bank, status: 'REJECTED', reason: 'Cliente não aprovado: Não temos condições aprováveis para este cliente.' };
+                    return { bankId: bank, status: 'ERROR', reason: error.message || 'Erro inesperado na comunicação com o banco.' };
                 } finally {
                     await context.close();
                 }
