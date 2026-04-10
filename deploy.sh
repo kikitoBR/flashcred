@@ -98,9 +98,9 @@ server {
 EOF
 
 sudo ln -sf /etc/nginx/sites-available/flashcred /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
+# Removed: sudo rm -f /etc/nginx/sites-enabled/default (Tome cuidado para não afetas outras aplicações)
 sudo nginx -t
-sudo systemctl restart nginx
+sudo systemctl reload nginx # Use reload instead of restart for zero downtime for other apps
 
 # 12. Start Application with PM2
 echo "🚀 Starting Server with PM2..."
@@ -109,5 +109,5 @@ pm2 stop flashcred-server || true
 pm2 start "npx ts-node src/index.ts" --name flashcred-server
 
 echo "✅ Deployment Complete!"
-echo "⚠️ IMPORTANT: Don't forget to configure your /var/www/flashcred/server/.env file!"
+echo "⚠️ IMPORTANT: Don't forget to configure your /var/www/flashcred/server/.env file with Hostinger DB credentials and custom JWT secret!"
 echo "⚠️ If using a domain, update /etc/nginx/sites-available/flashcred with your domain and setup SSL with Certbot."

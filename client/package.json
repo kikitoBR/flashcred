@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@clerk/clerk-react": "^5.61.4",
     "@google/genai": "^1.30.0",
     "lucide-react": "^0.555.0",
     "react": "^19.2.0",
