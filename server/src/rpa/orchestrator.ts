@@ -89,7 +89,7 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
         options: options
     };
 
-    // Launch ONE browser, then run all RPA banks in PARALLEL contexts
+    // Launch ONE browser, then run RPA banks in BATCHES of 2
     let browser;
     let rpaResults: any[] = [];
 
@@ -101,29 +101,29 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-blink-features=AutomationControlled',
-                '--disable-infobars'
+                '--disable-infobars',
+                '--disable-gpu',
+                '--disable-dev-shm-usage'
             ]
         });
 
         try {
-            // Create parallel promises for each RPA bank
-            const rpaPromises = rpaBanks.map(async (bank) => {
+            // Helper: run a single bank simulation
+            const runBankSimulation = async (bank: string) => {
                 const internalBankId = BANK_ID_MAP[bank];
-                console.log(`[Orchestrator] 🚀 Launching parallel simulation for ${internalBankId} (${bank})`);
+                console.log(`[Orchestrator] 🚀 Launching simulation for ${internalBankId} (${bank})`);
 
-                // Create adapter
                 const adapter = createAdapter(internalBankId);
                 if (!adapter) {
                     console.warn(`[Orchestrator] No adapter for ${internalBankId}`);
                     return { bankId: bank, status: 'ERROR', reason: 'Integração não disponível para este banco.' };
                 }
 
-                // Fetch credentials using original frontend ID to match DB
-                const tenantId = 'tenant-123'; // Using demo tenant currently
+                const tenantId = 'tenant-123';
                 const userId = input.options?.userId;
                 
                 if (!userId) {
-                    console.error(`[Orchestrator] Falha: userId é obrigatório para acessar credenciais. Banco: ${bank}`);
+                    console.error(`[Orchestrator] Falha: userId é obrigatório. Banco: ${bank}`);
                     return { bankId: bank, status: 'REJECTED', reason: 'Usuário não autenticado ou faltando ID.' };
                 }
 
@@ -133,9 +133,8 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                     return { bankId: bank, status: 'ERROR', reason: 'Credencial não definida: Por favor, configure os dados de acesso no painel de credenciais.' };
                 }
 
-                // Each bank gets its own browser context (isolated session)
                 const context = await browser!.newContext({
-                    viewport: null,
+                    viewport: { width: 1366, height: 768 },
                     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     locale: 'pt-BR',
                     timezoneId: 'America/Sao_Paulo',
@@ -144,28 +143,27 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                 const page = await context.newPage();
 
                 try {
-                    // Login
+                    console.log(`[Orchestrator] 🔑 Attempting login for ${internalBankId}...`);
                     const loggedIn = await adapter.login(page, credentials);
                     if (!loggedIn) {
-                        console.error(`[Orchestrator] Login failed for ${internalBankId}`);
+                        const currentUrl = page.url();
+                        console.error(`[Orchestrator] ❌ Login failed for ${internalBankId}. Current URL: ${currentUrl}`);
                         return { bankId: bank, status: 'LOGIN_FAILED', reason: 'Falha geral ao conectar no sistema do banco.' };
                     }
 
                     console.log(`[Orchestrator] ✅ Login OK for ${internalBankId}`);
 
-                    // Simulate
                     const simulationResult = await adapter.simulate(page, input);
 
-                    // Map result
                     if (simulationResult.status === 'SUCCESS') {
                         return {
                             bankId: bank,
                             status: 'APPROVED',
-                            interestRate: simulationResult.offers.find(o => o.interestRate > 0)?.interestRate || 0,
+                            interestRate: simulationResult.offers.find((o: any) => o.interestRate > 0)?.interestRate || 0,
                             maxInstallments: 60,
                             downPayment: input.downPayment,
                             minDownPayment: simulationResult.minDownPayment,
-                            installments: simulationResult.offers.map(o => ({
+                            installments: simulationResult.offers.map((o: any) => ({
                                 months: o.installments,
                                 value: o.monthlyPayment,
                                 interestRate: o.interestRate,
@@ -198,12 +196,17 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                 } finally {
                     await context.close();
                 }
-            });
+            };
 
-            // Run ALL RPA simulations in parallel!
-            console.log(`[Orchestrator] ⚡ Running ${rpaBanks.length} RPA simulations in parallel...`);
-            rpaResults = await Promise.all(rpaPromises);
-            console.log(`[Orchestrator] ✅ All ${rpaBanks.length} parallel simulations completed!`);
+            // Run in BATCHES of 2 to avoid memory overload on VPS
+            const BATCH_SIZE = 2;
+            for (let i = 0; i < rpaBanks.length; i += BATCH_SIZE) {
+                const batch = rpaBanks.slice(i, i + BATCH_SIZE);
+                console.log(`[Orchestrator] 📦 Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.join(', ')}`);
+                const batchResults = await Promise.all(batch.map(bank => runBankSimulation(bank)));
+                rpaResults.push(...batchResults);
+            }
+            console.log(`[Orchestrator] ✅ All ${rpaBanks.length} simulations completed!`);
 
         } catch (error) {
             console.error('[Orchestrator] Global error:', error);
