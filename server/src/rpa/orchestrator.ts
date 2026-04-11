@@ -112,122 +112,140 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
 
         try {
             // Create parallel promises for each RPA bank with a small stagger
-            const rpaPromises = rpaBanks.map(async (bank, index) => {
-                // Wait a small amount (2s per bank) to stagger the CPU load spike
-                if (index > 0) {
-                    await new Promise(resolve => setTimeout(resolve, index * 2000));
-                }
+        const runSimForBank = async (bank: string, index: number) => {
+            // Wait a small amount (5s per bank) to stagger the CPU load spike
+            if (index > 0) {
+                await new Promise(resolve => setTimeout(resolve, index * 5000));
+            }
 
-                const internalBankId = BANK_ID_MAP[bank];
-                console.log(`[Orchestrator] 🚀 Launching parallel simulation for ${internalBankId} (${bank})`);
+            const internalBankId = BANK_ID_MAP[bank];
+            console.log(`[Orchestrator] 🚀 Launching simulation for ${internalBankId} (${bank})`);
 
-                const adapter = createAdapter(internalBankId);
-                if (!adapter) {
-                    console.warn(`[Orchestrator] No adapter for ${internalBankId}`);
-                    return { bankId: bank, status: 'ERROR', reason: 'Integração não disponível para este banco.' };
-                }
+            const adapter = createAdapter(internalBankId);
+            if (!adapter) {
+                console.warn(`[Orchestrator] No adapter for ${internalBankId}`);
+                return { bankId: bank, status: 'ERROR', reason: 'Integração não disponível para este banco.' };
+            }
 
-                const tenantId = 'tenant-123';
-                const userId = input.options?.userId;
-                
-                if (!userId) {
-                    console.error(`[Orchestrator] Falha: userId é obrigatório. Banco: ${bank}`);
-                    return { bankId: bank, status: 'REJECTED', reason: 'Usuário não autenticado ou faltando ID.' };
-                }
+            const tenantId = 'tenant-123';
+            const userId = input.options?.userId;
+            
+            if (!userId) {
+                console.error(`[Orchestrator] Falha: userId é obrigatório. Banco: ${bank}`);
+                return { bankId: bank, status: 'REJECTED', reason: 'Usuário não autenticado ou faltando ID.' };
+            }
 
-                const credentials = await credentialService.getCredentials(bank, tenantId, userId);
-                if (!credentials) {
-                    console.error(`[Orchestrator] No credentials for ${bank}`);
-                    return { bankId: bank, status: 'ERROR', reason: 'Credencial não definida: Por favor, configure os dados de acesso no painel de credenciais.' };
-                }
+            const credentials = await credentialService.getCredentials(bank, tenantId, userId);
+            if (!credentials) {
+                console.error(`[Orchestrator] No credentials for ${bank}`);
+                return { bankId: bank, status: 'ERROR', reason: 'Credencial não definida: Por favor, configure os dados de acesso no painel de credenciais.' };
+            }
 
-                const context = await browser!.newContext({
-                    viewport: { width: 1366, height: 768 },
-                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    locale: 'pt-BR',
-                    timezoneId: 'America/Sao_Paulo',
-                    permissions: ['geolocation'],
-                });
-                const page = await context.newPage();
+            const context = await browser!.newContext({
+                viewport: { width: 1366, height: 768 },
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                locale: 'pt-BR',
+                timezoneId: 'America/Sao_Paulo',
+                permissions: ['geolocation'],
+            });
+            const page = await context.newPage();
 
-                // Anti-bot detection for ALL banks (centralized)
-                await page.addInitScript(() => {
-                    // Hide webdriver flag
-                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                    // Fake Chrome runtime
-                    (window as any).chrome = { runtime: {} };
-                    // Override permissions API
-                    const originalQuery = window.navigator.permissions.query;
-                    window.navigator.permissions.query = (parameters: any) =>
-                        parameters.name === 'notifications'
-                            ? Promise.resolve({ state: Notification.permission } as PermissionStatus)
-                            : originalQuery(parameters);
-                });
-
-                // Set generous timeouts for VPS parallel execution
-                page.setDefaultTimeout(60000);
-                page.setDefaultNavigationTimeout(90000);
-
-                try {
-                    console.log(`[Orchestrator] 🔑 Attempting login for ${internalBankId}...`);
-                    const loggedIn = await adapter.login(page, credentials);
-                    if (!loggedIn) {
-                        const currentUrl = page.url();
-                        console.error(`[Orchestrator] ❌ Login failed for ${internalBankId}. URL: ${currentUrl}`);
-                        return { bankId: bank, status: 'LOGIN_FAILED', reason: 'Falha geral ao conectar no sistema do banco.' };
-                    }
-
-                    console.log(`[Orchestrator] ✅ Login OK for ${internalBankId}`);
-
-                    const simulationResult = await adapter.simulate(page, input);
-
-                    if (simulationResult.status === 'SUCCESS') {
-                        return {
-                            bankId: bank,
-                            status: 'APPROVED',
-                            interestRate: simulationResult.offers.find((o: any) => o.interestRate > 0)?.interestRate || 0,
-                            maxInstallments: 60,
-                            downPayment: input.downPayment,
-                            minDownPayment: simulationResult.minDownPayment,
-                            installments: simulationResult.offers.map((o: any) => ({
-                                months: o.installments,
-                                value: o.monthlyPayment,
-                                interestRate: o.interestRate,
-                                hasHighChance: o.hasHighChance,
-                                description: o.description
-                            })),
-                            reason: simulationResult.message,
-                            warning: simulationResult.warning,
-                            minimumDownPayment: simulationResult.minimumDownPayment
-                        };
-                    } else {
-                        return {
-                            bankId: bank,
-                            status: 'REJECTED',
-                            reason: simulationResult.message || 'Proposta não aprovada na política do banco.'
-                        };
-                    }
-                } catch (error: any) {
-                    console.error(`[Orchestrator] Error for ${internalBankId}:`, error.message);
-                    if (
-                        error.message === 'Usuário ou senha inválida' || 
-                        error.message === 'Usuário e/ou senha inválido(s)' || 
-                        error.message === 'Nome de usuário ou senha inválida' ||
-                        error.message === 'CPF inválido ou senha incorreta' ||
-                        error.message === 'Usuário ou senha inválido.'
-                    ) {
-                        return { bankId: bank, status: 'REJECTED', reason: 'Usuário e/ou senha inválido(s)' };
-                    }
-                    return { bankId: bank, status: 'ERROR', reason: error.message || 'Erro inesperado na comunicação com o banco.' };
-                } finally {
-                    await context.close();
+            // PERFORMANCE OPTIMIZATION: Block images, media, and fonts to save CPU/RAM/Bandwidth
+            await page.route('**/*', (route) => {
+                const type = route.request().resourceType();
+                if (['image', 'media', 'font'].includes(type)) {
+                    route.abort();
+                } else {
+                    route.continue();
                 }
             });
 
-            // Run ALL RPA simulations in parallel!
-            console.log(`[Orchestrator] ⚡ Running ${rpaBanks.length} RPA simulations in parallel...`);
-            rpaResults = await Promise.all(rpaPromises);
-            console.log(`[Orchestrator] ✅ All ${rpaBanks.length} parallel simulations completed!`);
+            // Anti-bot detection for ALL banks (centralized)
+            await page.addInitScript(() => {
+                // Hide webdriver flag
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                // Fake Chrome runtime
+                (window as any).chrome = { runtime: {} };
+                // Override permissions API
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters: any) =>
+                    parameters.name === 'notifications'
+                        ? Promise.resolve({ state: Notification.permission } as PermissionStatus)
+                        : originalQuery(parameters);
+            });
+
+            // Set generous timeouts for VPS parallel execution
+            page.setDefaultTimeout(60000);
+            page.setDefaultNavigationTimeout(90000);
+
+            try {
+                console.log(`[Orchestrator] 🔑 Attempting login for ${internalBankId}...`);
+                const loggedIn = await adapter.login(page, credentials);
+                if (!loggedIn) {
+                    const currentUrl = page.url();
+                    console.error(`[Orchestrator] ❌ Login failed for ${internalBankId}. URL: ${currentUrl}`);
+                    return { bankId: bank, status: 'LOGIN_FAILED', reason: 'Falha geral ao conectar no sistema do banco.' };
+                }
+
+                console.log(`[Orchestrator] ✅ Login OK for ${internalBankId}`);
+
+                const simulationResult = await adapter.simulate(page, input);
+
+                if (simulationResult.status === 'SUCCESS') {
+                    return {
+                        bankId: bank,
+                        status: 'APPROVED',
+                        interestRate: simulationResult.offers.find((o: any) => o.interestRate > 0)?.interestRate || 0,
+                        maxInstallments: 60,
+                        downPayment: input.downPayment,
+                        minDownPayment: simulationResult.minDownPayment,
+                        installments: simulationResult.offers.map((o: any) => ({
+                            months: o.installments,
+                            value: o.monthlyPayment,
+                            interestRate: o.interestRate,
+                            hasHighChance: o.hasHighChance,
+                            description: o.description
+                        })),
+                        reason: simulationResult.message,
+                        warning: simulationResult.warning,
+                        minimumDownPayment: simulationResult.minimumDownPayment
+                    };
+                } else {
+                    return {
+                        bankId: bank,
+                        status: 'REJECTED',
+                        reason: simulationResult.message || 'Proposta não aprovada na política do banco.'
+                    };
+                }
+            } catch (error: any) {
+                console.error(`[Orchestrator] Error for ${internalBankId}:`, error.message);
+                if (
+                    error.message === 'Usuário ou senha inválida' || 
+                    error.message === 'Usuário e/ou senha inválido(s)' || 
+                    error.message === 'Nome de usuário ou senha inválida' ||
+                    error.message === 'CPF inválido ou senha incorreta' ||
+                    error.message === 'Usuário ou senha inválido.'
+                ) {
+                    return { bankId: bank, status: 'REJECTED', reason: 'Usuário e/ou senha inválido(s)' };
+                }
+                return { bankId: bank, status: 'ERROR', reason: error.message || 'Erro inesperado na comunicação com o banco.' };
+            } finally {
+                await context.close();
+            }
+        };
+
+        try {
+            // Run RPA simulations in BATCHES of 3 to preserve VPS resources
+            const CONCURRENCY_LIMIT = 3;
+            console.log(`[Orchestrator] ⚡ Running ${rpaBanks.length} RPA simulations in batches (limit: ${CONCURRENCY_LIMIT})...`);
+            
+            for (let i = 0; i < rpaBanks.length; i += CONCURRENCY_LIMIT) {
+                const batch = rpaBanks.slice(i, i + CONCURRENCY_LIMIT);
+                const batchResults = await Promise.all(batch.map((bank, index) => runSimForBank(bank, index)));
+                rpaResults.push(...batchResults);
+            }
+            
+            console.log(`[Orchestrator] ✅ All ${rpaBanks.length} simulations completed in batches!`);
 
         } catch (error) {
             console.error('[Orchestrator] Global error:', error);
