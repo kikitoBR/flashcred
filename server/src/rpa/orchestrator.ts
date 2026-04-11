@@ -109,9 +109,6 @@ export const runSimulations = async (client: any, vehicle: any, banks: string[],
                 '--js-flags="--max-old-space-size=512"' // Limit memory per tab
             ]
         });
-
-        try {
-            // Create parallel promises for each RPA bank with a small stagger
         try {
             // Create parallel promises for each RPA bank with a small stagger
             const rpaPromises = rpaBanks.map(async (bank, index) => {
